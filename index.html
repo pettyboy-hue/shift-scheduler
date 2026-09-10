@@ -11,7 +11,7 @@
         <header class="header">
             <div class="header-left">
                 <h1>📅 排班助手</h1>
-                <span class="subtitle">固定班次 · 智能调休 · 人性化分析</span>
+                <span class="subtitle">固定班次 · 工作日满员 · 双休日减半</span>
             </div>
             <div class="header-right">
                 <button id="btn-export" class="btn btn-outline">📥 导出CSV</button>
@@ -49,23 +49,23 @@
                     <div class="config-group">
                         <label>本周类型</label>
                         <select id="select-week-type">
-                            <option value="big">大休周（双休：周六+周日）</option>
-                            <option value="small">小休周（单休：仅周日）</option>
+                            <option value="big">大休周（双休：周六+周日）→ 周末班次减半</option>
+                            <option value="small">小休周（单休：仅周日）→ 周六照常满员</option>
                         </select>
                     </div>
                     <div class="config-group">
                         <label>业务松紧度</label>
                         <select id="select-busyness">
-                            <option value="normal">正常</option>
-                            <option value="light">宽松（周末白班可空）</option>
-                            <option value="busy">繁忙（周末不减人）</option>
+                            <option value="normal">正常（双休日减半）</option>
+                            <option value="light">宽松（双休日白班可空）</option>
+                            <option value="busy">繁忙（双休日也满员）</option>
                         </select>
                     </div>
 
                     <div class="config-section">
                         <h3>🏖️ 特殊情况</h3>
                         <div id="special-list" class="special-list">
-                            <!-- 动态生成：每人一行，可勾选调休/请假 -->
+                            <!-- 动态生成 -->
                         </div>
                     </div>
 
@@ -76,9 +76,18 @@
                 <section class="panel">
                     <h2>🕐 班次说明</h2>
                     <div class="shift-legend">
-                        <div class="shift-item"><span class="shift-dot morning"></span><span>☀️ 早班 09:00 - 18:00（工作日1人，周末视业务0-1人）</span></div>
-                        <div class="shift-item"><span class="shift-dot middle"></span><span>🌤️ 中班 16:00 - 次日01:00（工作日2人，周末1人）</span></div>
-                        <div class="shift-item"><span class="shift-dot night"></span><span>🌙 晚班 21:00 - 次日05:00（4人轮换，每天2人，周末1人）</span></div>
+                        <div class="shift-item"><span class="shift-dot morning"></span><span>☀️ 早班 09:00-18:00（工作日1人固定）</span></div>
+                        <div class="shift-item"><span class="shift-dot middle"></span><span>🌤️ 中班 16:00-次日01:00（工作日2人满员）</span></div>
+                        <div class="shift-item"><span class="shift-dot night"></span><span>🌙 晚班 21:00-次日05:00（工作日2人，4人轮换）</span></div>
+                    </div>
+                    <div class="shift-rules">
+                        <h3>📌 排班规则</h3>
+                        <ul>
+                            <li><strong>工作日</strong>（含小休周周六）：所有班次<span class="rule-highlight">必须满员</span></li>
+                            <li><strong>仅大休周的周六+周日</strong>：班次人员<span class="rule-highlight-alt">减半</span></li>
+                            <li>晚班4人每天上2人，系统自动公平轮换</li>
+                            <li>宽松时双休日白班可不排人</li>
+                        </ul>
                     </div>
                 </section>
             </aside>
@@ -87,6 +96,9 @@
             <div class="content">
                 <!-- 预警横幅 -->
                 <div id="warning-banner" class="warning-banner" style="display:none;"></div>
+
+                <!-- 覆盖率面板 -->
+                <div id="coverage-panel" class="coverage-panel" style="display:none;"></div>
 
                 <!-- 排班结果 -->
                 <section class="panel" id="schedule-panel">
@@ -155,7 +167,6 @@
     </div>
 
     <script src="scheduler.js"></script>
-    <script src="analyzer.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
