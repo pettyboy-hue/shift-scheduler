@@ -2,913 +2,688 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>排班助手</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#333;line-height:1.6;padding:20px;}
-.container{max-width:1200px;margin:0 auto;}
-.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:24px 32px;border-radius:16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(102,126,234,.3);}
-.header h1{font-size:24px;margin-bottom:4px;}
-.header p{opacity:.85;font-size:14px;}
-.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);}
-.card h2{font-size:16px;color:#444;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #f0f0f0;}
-
-/* 员工展示 */
-.shift-group{margin-bottom:14px;}
-.shift-group-title{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;padding:6px 14px;border-radius:20px;margin-bottom:6px;}
-.shift-group-title.morning{background:#fff7e6;color:#d48806;}
-.shift-group-title.middle{background:#e6f7ff;color:#0070c0;}
-.shift-group-title.night{background:#f3e8ff;color:#722ed1;}
-.emp-tags{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px 12px;}
-.emp-tag{padding:4px 12px;border-radius:6px;font-size:13px;background:#fafafa;border:1px solid #e8e8e8;position:relative;cursor:default;}
-.emp-tag .gear-btn{display:none;position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#667eea;color:#fff;font-size:10px;line-height:18px;text-align:center;cursor:pointer;border:none;box-shadow:0 1px 3px rgba(0,0,0,.3);}
-.emp-tag:hover .gear-btn{display:block;}
-.shift-rule{font-size:12px;color:#999;margin-left:12px;margin-top:2px;}
-.override-badge{display:inline-block;font-size:10px;background:#ff4d4f;color:#fff;padding:0 5px;border-radius:8px;margin-left:4px;vertical-align:middle;}
-
-/* 弹窗 */
-.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:1000;justify-content:center;align-items:center;}
-.modal-overlay.open{display:flex;}
-.modal{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 30px rgba(0,0,0,.2);}
-.modal h3{font-size:17px;margin-bottom:16px;text-align:center;}
-.modal .options{display:flex;flex-direction:column;gap:10px;}
-.shift-option{padding:14px 16px;border:2px solid #e8e8e8;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:all .15s;font-size:14px;}
-.shift-option:hover{border-color:#667eea;background:#f8f7ff;}
-.shift-option.active{border-color:#667eea;background:#eef0ff;font-weight:600;}
-.shift-option .dot{width:12px;height:12px;border-radius:50%;}
-.shift-option .dot.morning{background:#faad14;}
-.shift-option .dot.middle{background:#1890ff;}
-.shift-option .dot.night{background:#722ed1;}
-.modal .actions{display:flex;gap:10px;margin-top:20px;}
-.modal .actions button{flex:1;padding:10px;border-radius:8px;font-size:14px;cursor:pointer;border:none;font-weight:600;}
-.btn-cancel{background:#f0f0f0;color:#666;}
-.btn-cancel:hover{background:#e0e0e0;}
-.btn-confirm{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;}
-.btn-confirm:hover{box-shadow:0 3px 10px rgba(102,126,234,.4);}
-.btn-reset{background:#fff7e6;color:#d48806;border:1px solid #ffe58f;}
-.btn-reset:hover{background:#fff1cc;}
-.modal .tip{font-size:12px;color:#999;text-align:center;margin-top:12px;}
-
-/* 控制面板 */
-.controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;}
-.control-item{display:flex;flex-direction:column;gap:4px;}
-.control-item label{font-size:13px;color:#666;font-weight:500;}
-.control-item select,.control-item input[type="date"]{padding:8px 12px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;background:#fff;cursor:pointer;}
-.control-item select:focus,.control-item input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.15);}
-.btn-generate{padding:10px 28px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;}
-.btn-generate:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(102,126,234,.4);}
-
-/* 特殊情况 */
-.special-toggle{background:none;border:1px dashed #d9d9d9;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;color:#666;width:100%;text-align:left;margin-top:12px;}
-.special-toggle:hover{border-color:#667eea;color:#667eea;}
-.special-panel{display:none;margin-top:12px;padding:16px;background:#fafafa;border-radius:8px;}
-.special-panel.open{display:block;}
-.leave-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;flex-wrap:wrap;}
-.leave-row input[type="checkbox"]{width:16px;height:16px;cursor:pointer;}
-.leave-row select{padding:4px 8px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;}
-
-/* 排班表 */
-#result{display:none;}
-.schedule-table{width:100%;border-collapse:collapse;font-size:14px;}
-.schedule-table th{padding:10px 8px;text-align:center;background:#fafafa;font-weight:600;border-bottom:2px solid #e8e8e8;font-size:13px;}
-.schedule-table th .date{font-size:12px;color:#999;font-weight:400;}
-.schedule-table th.weekend{color:#f5222d;}
-.schedule-table td{padding:8px;text-align:center;border-bottom:1px solid #f0f0f0;}
-.schedule-table td.name-cell{text-align:left;font-weight:600;padding-left:16px;white-space:nowrap;}
-
-/* 班次标签 */
-.badge{display:inline-block;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;min-width:36px;}
-.badge:hover{transform:scale(1.1);box-shadow:0 2px 6px rgba(0,0,0,.15);}
-.badge.morning{background:#fff7e6;color:#d48806;border:1px solid #ffe58f;}
-.badge.middle{background:#e6f7ff;color:#0070c0;border:1px solid #91d5ff;}
-.badge.night{background:#f3e8ff;color:#722ed1;border:1px solid #d3adf7;}
-.badge.rest{background:#f6ffed;color:#52c41a;border:1px solid #b7eb8f;}
-.badge.leave-b{background:#fff0f0;color:#cf1322;border:1px solid #ffa39e;}
-
-/* 休息状态标签 */
-.rest-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;}
-.rest-tag.double{background:#f6ffed;color:#389e0d;}
-.rest-tag.linked{background:#e6fffb;color:#08979c;}
-.rest-tag.single{background:#fffbe6;color:#d48806;}
-.rest-tag.split{background:#fff2e8;color:#d4380d;}
-.rest-tag.none{background:#fff1f0;color:#cf1322;}
-
-/* 分组行 */
-.group-sep td{padding:8px 16px;background:#f7f7f7;font-weight:600;font-size:13px;color:#666;text-align:left!important;border-bottom:2px solid #e8e8e8;}
-/* 统计行 */
-.stat-row td{background:#fafafa;font-size:12px;color:#888;padding:6px 8px;border-top:1px solid #eee;}
-.stat-row td.short{color:#cf1322;font-weight:600;}
-.stat-total td{border-top:2px solid #e8e8e8;}
-
-/* 分析区 */
-.analysis-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
-.pcard{padding:14px;border-radius:10px;border:1px solid #e8e8e8;transition:all .2s;}
-.pcard:hover{box-shadow:0 2px 10px rgba(0,0,0,.08);}
-.pcard .pname{font-weight:600;font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px;}
-.pcard .pshift{font-size:12px;color:#999;margin-bottom:8px;}
-.pcard .pstats{font-size:13px;color:#666;}
-.pcard .pstats div{margin-bottom:3px;}
-.week-bar{display:flex;gap:3px;margin-top:8px;}
-.week-bar span{padding:2px 6px;border-radius:4px;font-size:11px;}
-.suggestions{list-style:none;padding:0;}
-.suggestions li{padding:10px 14px;margin-bottom:6px;border-radius:8px;font-size:13px;display:flex;align-items:flex-start;gap:8px;}
-.suggestions li.warn{background:#fffbe6;border:1px solid #ffe58f;color:#ad6800;}
-.suggestions li.error{background:#fff1f0;border:1px solid #ffa39e;color:#a8071a;}
-.suggestions li.ok{background:#f6ffed;border:1px solid #b7eb8f;color:#389e0d;}
-
-/* 均衡度指示器 */
-.balance-bar{margin-top:16px;padding:14px;background:#f9f9f9;border-radius:10px;border:1px solid #eee;}
-.balance-bar h3{font-size:14px;margin-bottom:10px;color:#555;}
-.balance-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;}
-.balance-row .blabel{min-width:60px;font-weight:500;}
-.balance-row .bbar{flex:1;height:20px;background:#f0f0f0;border-radius:10px;overflow:hidden;display:flex;}
-.balance-row .bbar .seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:600;}
-
-.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);padding:10px 24px;background:#333;color:#fff;border-radius:8px;font-size:14px;opacity:0;transition:all .3s;z-index:999;pointer-events:none;}
-.toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
-.btn-export{padding:8px 20px;background:#52c41a;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;margin-right:8px;}
-.btn-export:hover{background:#389e0d;}
-.history-list{max-height:200px;overflow-y:auto;}
-.history-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;cursor:pointer;transition:background .15s;}
-.history-item:hover{background:#f6f6f6;}
-.history-item .meta{color:#999;font-size:12px;}
-
-@media(max-width:768px){
-  body{padding:10px;}
-  .controls{flex-direction:column;}
-  .schedule-table{font-size:12px;}
-  .badge{padding:3px 8px;font-size:11px;min-width:28px;}
-  .analysis-grid{grid-template-columns:1fr;}
-  .modal{width:90%;padding:20px;}
-}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#333;line-height:1.6;padding:20px}
+.container{max-width:1400px;margin:0 auto}
+.header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:24px 32px;border-radius:16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(102,126,234,.3)}
+.header h1{font-size:24px;margin-bottom:4px}
+.header p{opacity:.85;font-size:14px}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.card h2{font-size:16px;color:#444;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #f0f0f0}
+.shift-group{margin-bottom:14px}
+.shift-group-title{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;padding:6px 14px;border-radius:20px;margin-bottom:6px}
+.shift-group-title.morning{background:#fff7e6;color:#d48806}
+.shift-group-title.middle{background:#e6f7ff;color:#0070c0}
+.shift-group-title.night{background:#f3e8ff;color:#722ed1}
+.emp-tags{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px 12px}
+.emp-tag{padding:4px 12px;border-radius:6px;font-size:13px;background:#fafafa;border:1px solid #e8e8e8;position:relative;cursor:default}
+.emp-tag .gear-btn{display:none;position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#667eea;color:#fff;font-size:10px;line-height:18px;text-align:center;cursor:pointer;border:none}
+.emp-tag:hover .gear-btn{display:block}
+.override-badge{display:inline-block;font-size:10px;background:#ff4d4f;color:#fff;padding:0 5px;border-radius:8px;margin-left:4px}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:1000;justify-content:center;align-items:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.modal h3{font-size:17px;margin-bottom:16px;text-align:center}
+.modal .options{display:flex;flex-direction:column;gap:10px}
+.shift-option{padding:14px 16px;border:2px solid #e8e8e8;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:all .15s;font-size:14px}
+.shift-option:hover{border-color:#667eea;background:#f8f7ff}
+.shift-option.active{border-color:#667eea;background:#eef0ff;font-weight:600}
+.shift-option .dot{width:12px;height:12px;border-radius:50%}
+.shift-option .dot.morning{background:#faad14}
+.shift-option .dot.middle{background:#1890ff}
+.shift-option .dot.night{background:#722ed1}
+.modal .actions{display:flex;gap:10px;margin-top:20px}
+.modal .actions button{flex:1;padding:10px;border-radius:8px;font-size:14px;cursor:pointer;border:none;font-weight:600}
+.btn-cancel{background:#f0f0f0;color:#666}
+.btn-confirm{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.btn-reset{background:#fff7e6;color:#d48806;border:1px solid #ffe58f!important}
+.modal .tip{font-size:12px;color:#999;text-align:center;margin-top:12px}
+.controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+.control-item{display:flex;flex-direction:column;gap:4px}
+.control-item label{font-size:13px;color:#666;font-weight:500}
+.control-item select,.control-item input[type="date"]{padding:8px 12px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;background:#fff;cursor:pointer}
+.control-item select:focus,.control-item input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.15)}
+.btn-generate{padding:10px 28px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap}
+.btn-generate:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(102,126,234,.4)}
+.week-configs{margin-top:16px;display:flex;flex-wrap:wrap;gap:12px}
+.week-config-card{flex:1;min-width:200px;border:1px solid #e8e8e8;border-radius:10px;padding:14px;background:#fafafa}
+.week-config-card h4{font-size:13px;color:#666;margin-bottom:8px}
+.week-config-card select{width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;margin-bottom:6px}
+.special-toggle{background:none;border:1px dashed #d9d9d9;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;color:#666;width:100%;text-align:left;margin-top:12px}
+.special-toggle:hover{border-color:#667eea;color:#667eea}
+.special-panel{display:none;margin-top:12px;padding:16px;background:#fafafa;border-radius:8px}
+.special-panel.open{display:block}
+.leave-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;flex-wrap:wrap}
+.leave-row input[type="checkbox"]{width:16px;height:16px;cursor:pointer}
+#result{display:none}
+.week-section{margin-bottom:24px;border:1px solid #e8e8e8;border-radius:10px;padding:16px;background:#fefefe}
+.week-section h3{font-size:14px;color:#555;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f0f0f0}
+.schedule-table{width:100%;border-collapse:collapse;font-size:14px}
+.schedule-table th{padding:10px 8px;text-align:center;background:#fafafa;font-weight:600;border-bottom:2px solid #e8e8e8;font-size:13px}
+.schedule-table th .date{font-size:12px;color:#999;font-weight:400}
+.schedule-table th.weekend{color:#f5222d}
+.schedule-table td{padding:8px;text-align:center;border-bottom:1px solid #f0f0f0}
+.schedule-table td.name-cell{text-align:left;font-weight:600;padding-left:16px;white-space:nowrap}
+.badge{display:inline-block;padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;min-width:36px}
+.badge:hover{transform:scale(1.1);box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.badge.morning{background:#fff7e6;color:#d48806;border:1px solid #ffe58f}
+.badge.middle{background:#e6f7ff;color:#0070c0;border:1px solid #91d5ff}
+.badge.night{background:#f3e8ff;color:#722ed1;border:1px solid #d3adf7}
+.badge.rest{background:#f6ffed;color:#52c41a;border:1px solid #b7eb8f}
+.badge.leave-b{background:#fff0f0;color:#cf1322;border:1px solid #ffa39e}
+.rest-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap}
+.rest-tag.double{background:#f6ffed;color:#389e0d}
+.rest-tag.linked{background:#e6fffb;color:#08979c}
+.rest-tag.single{background:#fffbe6;color:#d48806}
+.rest-tag.split{background:#fff2e8;color:#d4380d}
+.rest-tag.none{background:#fff1f0;color:#cf1322}
+.group-sep td{padding:8px 16px;background:#f7f7f7;font-weight:600;font-size:13px;color:#666;text-align:left!important;border-bottom:2px solid #e8e8e8}
+.stat-row td{background:#fafafa;font-size:12px;color:#888;padding:6px 8px}
+.stat-row td.short{color:#cf1322;font-weight:600}
+.stat-total td{border-top:2px solid #e8e8e8}
+.analysis-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.pcard{padding:14px;border-radius:10px;border:1px solid #e8e8e8}
+.pcard .pname{font-weight:600;font-size:15px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.pcard .pshift{font-size:12px;color:#999;margin-bottom:8px}
+.pcard .pstats{font-size:13px;color:#666}
+.pcard .pstats div{margin-bottom:3px}
+.week-bar{display:flex;gap:3px;margin-top:8px}
+.week-bar span{padding:2px 6px;border-radius:4px;font-size:11px}
+.suggestions{list-style:none;padding:0}
+.suggestions li{padding:10px 14px;margin-bottom:6px;border-radius:8px;font-size:13px;display:flex;align-items:flex-start;gap:8px}
+.suggestions li.warn{background:#fffbe6;border:1px solid #ffe58f;color:#ad6800}
+.suggestions li.error{background:#fff1f0;border:1px solid #ffa39e;color:#a8071a}
+.suggestions li.ok{background:#f6ffed;border:1px solid #b7eb8f;color:#389e0d}
+.summary-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px}
+.summary-table th,.summary-table td{padding:8px 12px;border:1px solid #e8e8e8;text-align:center}
+.summary-table th{background:#fafafa;font-weight:600}
+.summary-table td.warn-cell{background:#fffbe6;color:#d48806;font-weight:600}
+.summary-table td.good-cell{background:#f6ffed;color:#389e0d}
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);padding:10px 24px;background:#333;color:#fff;border-radius:8px;font-size:14px;opacity:0;transition:all .3s;z-index:999;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.btn-export{padding:8px 20px;border:none;border-radius:8px;font-size:13px;cursor:pointer;margin-right:8px;color:#fff}
+.btn-export:hover{opacity:.85}
+@media(max-width:768px){body{padding:10px}.controls{flex-direction:column}.schedule-table{font-size:12px}.badge{padding:3px 8px;font-size:11px;min-width:28px}.analysis-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="header">
-    <h1>📋 排班助手</h1>
-    <p>固定班次 · 大小休 · 均衡排班 · 手动微调 · 实时分析</p>
-  </div>
-
-  <div class="card" id="empCard"></div>
-
-  <div class="card">
-    <h2>⚙️ 本周排班设置</h2>
-    <div class="controls">
-      <div class="control-item">
-        <label>📅 起始周一</label>
-        <input type="date" id="weekStart">
-      </div>
-      <div class="control-item">
-        <label>🔄 本周类型</label>
-        <select id="weekType">
-          <option value="big">大休（双休：每人休2天）</option>
-          <option value="small">小休（单休：每人休1天）</option>
-        </select>
-      </div>
-      <div class="control-item">
-        <label>📊 周末业务</label>
-        <select id="bizLevel">
-          <option value="normal">正常</option>
-          <option value="light">宽松（早班周末可不排）</option>
-          <option value="busy">繁忙（尽量全员上）</option>
-        </select>
-      </div>
-      <button class="btn-generate" onclick="doGenerate()">🚀 生成排班</button>
-    </div>
-    <button class="special-toggle" onclick="toggleSpecial()">▶ 📝 特殊情况（调休/请假）点击展开</button>
-    <div class="special-panel" id="specialPanel"></div>
-  </div>
-
-  <div id="result">
-    <div class="card">
-      <h2 id="resultHeader">📊 排班结果</h2>
-      <div style="margin-bottom:12px;">
-        <button class="btn-export" onclick="exportCSV()">📥 导出CSV</button>
-        <button class="btn-export" style="background:#1890ff;" onclick="saveToHistory()">💾 保存记录</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="schedule-table" id="scheduleTable"></table>
-      </div>
-      <div id="balanceArea"></div>
-    </div>
-    <div class="card">
-      <h2>🔍 休息状态一览</h2>
-      <div class="analysis-grid" id="analysisGrid"></div>
-    </div>
-    <div class="card">
-      <h2>💡 智能建议</h2>
-      <ul class="suggestions" id="suggestions"></ul>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>📜 历史排班记录</h2>
-    <div class="history-list" id="historyList">
-      <div style="text-align:center;color:#ccc;padding:20px;">暂无记录</div>
-    </div>
-  </div>
+<div class="header"><h1>📋 排班助手</h1><p>固定班次 · 大小休 · 多周排班 · 手动微调 · 实时分析</p></div>
+<div class="card" id="empCard"></div>
+<div class="card">
+<h2>⚙️ 排班设置</h2>
+<div class="controls">
+<div class="control-item"><label>📅 起始周一</label><input type="date" id="weekStart"></div>
+<div class="control-item"><label>📏 排班范围</label>
+<select id="spanWeeks" onchange="onSpanChange()"><option value="1">1周</option><option value="2">2周</option><option value="4" selected>4周（一个月）</option></select>
 </div>
-
-<!-- 班次切换弹窗 -->
+<button class="btn-generate" onclick="doGenerate()">🚀 生成排班</button>
+</div>
+<div class="week-configs" id="weekConfigs"></div>
+<button class="special-toggle" onclick="toggleSpecial()">▶ 📝 特殊情况（调休/请假）点击展开</button>
+<div class="special-panel" id="specialPanel"></div>
+</div>
+<div id="result">
+<div class="card">
+<h2 id="resultHeader">📊 排班结果</h2>
+<div style="margin-bottom:12px">
+<button class="btn-export" style="background:#52c41a" onclick="exportCSV()">📥 导出CSV</button>
+<button class="btn-export" style="background:#1890ff" onclick="saveToHistory()">💾 保存记录</button>
+</div>
+<div id="weeksContainer"></div>
+</div>
+<div class="card"><h2>📊 多周总览</h2><div id="summaryArea"></div></div>
+<div class="card"><h2>🔍 休息状态一览</h2><div class="analysis-grid" id="analysisGrid"></div></div>
+<div class="card"><h2>💡 智能建议</h2><ul class="suggestions" id="suggestions"></ul></div>
+</div>
+</div>
 <div class="modal-overlay" id="shiftModal">
-  <div class="modal">
-    <h3 id="modalTitle">调整班次</h3>
-    <div class="options" id="modalOptions"></div>
-    <div class="actions">
-      <button class="btn-reset" id="modalReset" onclick="resetOverride()">恢复默认</button>
-      <button class="btn-cancel" onclick="closeModal()">取消</button>
-      <button class="btn-confirm" onclick="confirmOverride()">确认</button>
-    </div>
-    <div class="tip">⚠️ 仅影响本周排班，不改变默认固定班次</div>
-  </div>
+<div class="modal">
+<h3 id="modalTitle">调整班次</h3>
+<div class="options" id="modalOptions"></div>
+<div class="actions">
+<button class="btn-reset" id="modalReset" onclick="resetOverride()">恢复默认</button>
+<button class="btn-cancel" onclick="closeModal()">取消</button>
+<button class="btn-confirm" onclick="confirmOverride()">确认</button>
 </div>
-
+<div class="tip">⚠️ 仅影响排班周期，不改变默认固定班次</div>
+</div>
+</div>
 <div class="toast" id="toast"></div>
-
 <script>
-/* ===== 数据 ===== */
-const EMPS = [
-  { name:'罗凯',   shift:'morning' },
-  { name:'陈力',   shift:'middle'  },
-  { name:'柳鹏',   shift:'middle'  },
-  { name:'袁继春', shift:'night'   },
-  { name:'罗浩文', shift:'night'   },
-  { name:'陈阳倩', shift:'night'   },
-  { name:'罗森鹏', shift:'night'   },
+const EMPS=[
+{name:'罗凯',shift:'morning'},
+{name:'陈力',shift:'middle'},
+{name:'柳鹏',shift:'middle'},
+{name:'袁继春',shift:'night'},
+{name:'罗浩文',shift:'night'},
+{name:'陈阳倩',shift:'night'},
+{name:'罗森鹏',shift:'night'}
 ];
-const SI = {
-  morning:{ label:'早', full:'早班', time:'09:00-18:00', emoji:'☀️', hours:9 },
-  middle: { label:'中', full:'中班', time:'16:00-次日01:00', emoji:'🌤️', hours:9 },
-  night:  { label:'晚', full:'晚班', time:'21:00-次日05:00', emoji:'🌙', hours:8 },
+const SI={
+morning:{label:'早',full:'早班',time:'09:00-18:00',emoji:'☀️',hours:9},
+middle:{label:'中',full:'中班',time:'16:00-次日01:00',emoji:'🌤️',hours:9},
+night:{label:'晚',full:'晚班',time:'21:00-次日05:00',emoji:'🌙',hours:8}
 };
-const WD = ['周一','周二','周三','周四','周五','周六','周日'];
-
-/* 状态 */
-let overrides = {};     // { empIdx: 'morning'|... } 临时班次覆盖
-let sched = [];         // sched[empIdx][0..6] = true(上班)/false(休息)
-let leaves = {};        // { empIdx: { type, days:[] } }
-let wStart = null;      // Date 周一
-let wType = 'big';
-let biz = 'normal';
-let editIdx = null;
-let tempShift = null;
-
-/* 工具 */
+const WD=['周一','周二','周三','周四','周五','周六','周日'];
+let overrides={};
+let allWeeks=[];
+let leaves={};
+let editIdx=null,tempShift=null;
 const $=id=>document.getElementById(id);
 const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-const parse=s=>{const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);};
-const addD=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r;};
+const parse=s=>{const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])};
+const addD=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r};
 const getShift=i=>overrides[i]||EMPS[i].shift;
-const onLeave=(i,d)=>leaves[i]?leaves[i].days.includes(d):false;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
-
-/* ===== 初始化 ===== */
+/* 初始化 */
 (function(){
-  const t=new Date(),dow=t.getDay(),diff=dow===0?-6:1-dow;
-  const mon=new Date(t);mon.setDate(t.getDate()+diff);
-  $('weekStart').value=fmt(mon);
-  renderEmpCard();
-  renderSpecialPanel();
-  renderHistory();
+const t=new Date(),dow=t.getDay(),diff=dow===0?-6:1-dow;
+const mon=new Date(t);mon.setDate(t.getDate()+diff);
+$('weekStart').value=fmt(mon);
+renderEmpCard();renderSpecialPanel();onSpanChange();
 })();
 
-/* ===== 员工卡片 ===== */
 function renderEmpCard(){
-  const g={morning:[],middle:[],night:[]};
-  EMPS.forEach((e,i)=>g[getShift(i)].push(i));
-  let h='<h2>👥 当前排班人员 <span style="font-size:12px;color:#999;font-weight:400;">（鼠标移到名字上点⚙可临时调班）</span></h2>';
-  for(const [s,idxs] of Object.entries(g)){
-    if(!idxs.length) continue;
-    const si=SI[s];
-    h+=`<div class="shift-group"><div class="shift-group-title ${s}">${si.emoji} ${si.full} ${si.time}</div>`;
-    h+='<div class="emp-tags">';
-    for(const i of idxs){
-      h+=`<span class="emp-tag">${EMPS[i].name}${overrides[i]?'<span class="override-badge">临</span>':''}`;
-      h+=`<button class="gear-btn" onclick="openModal(${i})" title="临时调班">⚙</button></span>`;
-    }
-    h+='</div>';
-    const need=s==='morning'?1:2;
-    h+=`<div class="shift-rule">工作日${need}人 · 大休周末减半 · 小休周末拆半均衡值班</div></div>`;
-  }
-  $('empCard').innerHTML=h;
+const g={morning:[],middle:[],night:[]};
+EMPS.forEach((e,i)=>g[getShift(i)].push(i));
+let h='<h2>👥 当前排班人员 <span style="font-size:12px;color:#999;font-weight:400">（鼠标悬停点⚙可临时调班）</span></h2>';
+for(const[s,idxs]of Object.entries(g)){
+if(!idxs.length)continue;
+const si=SI[s];
+h+=`<div class="shift-group"><div class="shift-group-title ${s}">${si.emoji} ${si.full} ${si.time}</div>`;
+h+='<div class="emp-tags">';
+for(const i of idxs){
+h+=`<span class="emp-tag">${EMPS[i].name}${overrides[i]?'<span class="override-badge">临</span>':''}`;
+h+=`<button class="gear-btn" onclick="openModal(${i})">⚙</button></span>`;
+}
+h+='</div></div>';
+}
+$('empCard').innerHTML=h;
 }
 
-/* ===== 班次弹窗 ===== */
+/* 多周配置卡片 */
+function onSpanChange(){
+const n=+$('spanWeeks').value;
+let h='';
+for(let w=0;w<n;w++){
+h+=`<div class="week-config-card"><h4>第${w+1}周</h4>`;
+h+=`<select id="wt_${w}"><option value="big">大休（双休2天）</option><option value="small"${w%2===1?' selected':''}>小休（单休1天）</option><option value="busy">繁忙（全员上）</option></select>`;
+h+=`<select id="bz_${w}"><option value="normal">正常</option><option value="light">宽松</option><option value="busy">繁忙</option></select>`;
+h+=`</div>`;
+}
+$('weekConfigs').innerHTML=h;
+}
+
 function openModal(i){
-  editIdx=i; tempShift=getShift(i);
-  $('modalTitle').textContent=`调整 ${EMPS[i].name} 的本周班次`;
-  $('modalReset').style.display=overrides[i]?'block':'none';
-  let h='';
-  for(const [k,si] of Object.entries(SI)){
-    const act=k===tempShift?'active':'';
-    const def=k===EMPS[i].shift?'<span style="font-size:11px;color:#999;margin-left:auto;">（默认）</span>':'';
-    h+=`<div class="shift-option ${act}" data-s="${k}" onclick="pickShift(this,'${k}')"><span class="dot ${k}"></span><span>${si.emoji} ${si.full} ${si.time}</span>${def}</div>`;
-  }
-  $('modalOptions').innerHTML=h;
-  $('shiftModal').classList.add('open');
+editIdx=i;tempShift=getShift(i);
+$('modalTitle').textContent='调整 '+EMPS[i].name+' 的班次';
+$('modalReset').style.display=overrides[i]?'block':'none';
+let h='';
+for(const[k,si]of Object.entries(SI)){
+const act=k===tempShift?'active':'';
+const def=k===EMPS[i].shift?' <span style="font-size:11px;color:#999;margin-left:auto">（默认）</span>':'';
+h+=`<div class="shift-option ${act}" onclick="pickShift(this,'${k}')"><span class="dot ${k}"></span><span>${si.emoji} ${si.full} ${si.time}</span>${def}</div>`;
 }
-function pickShift(el,s){document.querySelectorAll('.shift-option').forEach(o=>o.classList.remove('active'));el.classList.add('active');tempShift=s;}
+$('modalOptions').innerHTML=h;
+$('shiftModal').classList.add('open');
+}
+function pickShift(el,s){document.querySelectorAll('.shift-option').forEach(o=>o.classList.remove('active'));el.classList.add('active');tempShift=s}
 function confirmOverride(){
-  if(editIdx===null)return;
-  if(tempShift===EMPS[editIdx].shift) delete overrides[editIdx]; else overrides[editIdx]=tempShift;
-  closeModal(); renderEmpCard();
-  if(sched.length){generateSchedule();renderResult();}
-  toast(`${EMPS[editIdx].name} 本周→ ${SI[getShift(editIdx)].emoji}${SI[getShift(editIdx)].full}`);
+if(editIdx===null)return;
+if(tempShift===EMPS[editIdx].shift)delete overrides[editIdx];else overrides[editIdx]=tempShift;
+closeModal();renderEmpCard();
+if(allWeeks.length){doGenerate()}
+toast(EMPS[editIdx].name+' → '+SI[getShift(editIdx)].full);
 }
-function resetOverride(){if(editIdx===null)return;delete overrides[editIdx];closeModal();renderEmpCard();if(sched.length){generateSchedule();renderResult();}toast(`${EMPS[editIdx].name} 恢复默认班次`);}
-function closeModal(){$('shiftModal').classList.remove('open');editIdx=null;tempShift=null;}
+function resetOverride(){if(editIdx===null)return;delete overrides[editIdx];closeModal();renderEmpCard();if(allWeeks.length)doGenerate();toast(EMPS[editIdx].name+' 恢复默认')}
+function closeModal(){$('shiftModal').classList.remove('open');editIdx=null}
 
-/* ===== 特殊情况 ===== */
 function toggleSpecial(){
-  const p=$('specialPanel'),b=document.querySelector('.special-toggle');
-  p.classList.toggle('open');
-  b.textContent=p.classList.contains('open')?'▼ 📝 特殊情况（调休/请假）收起':'▶ 📝 特殊情况（调休/请假）展开';
+const p=$('specialPanel');p.classList.toggle('open');
 }
 function renderSpecialPanel(){
-  let h='<h3 style="font-size:14px;color:#666;margin-bottom:10px;">勾选有特殊情况的员工：</h3>';
-  EMPS.forEach((e,i)=>{
-    h+=`<div class="leave-row"><input type="checkbox" id="lv${i}" onchange="syncLeaves()">`;
-    h+=`<span style="min-width:60px;font-weight:600;">${e.name}</span>`;
-    h+=`<select id="lt${i}" onchange="syncLeaves()"><option value="leave">请假</option><option value="dayoff">调休</option></select>`;
-    h+=`<span style="font-size:12px;color:#999;">哪几天：</span>`;
-    WD.forEach((w,d)=>{h+=`<label style="font-size:12px;"><input type="checkbox" class="ld${i}" value="${d}" onchange="syncLeaves()"> ${w}</label>`;});
-    h+='</div>';
-  });
-  $('specialPanel').innerHTML=h;
+let h='<p style="font-size:13px;color:#666;margin-bottom:10px">勾选有特殊情况的员工：</p>';
+EMPS.forEach((e,i)=>{
+h+=`<div class="leave-row"><input type="checkbox" id="lv${i}">`;
+h+=`<span style="min-width:60px;font-weight:600">${e.name}</span>`;
+h+=`<select id="lt${i}"><option value="leave">请假</option><option value="dayoff">调休</option></select>`;
+h+=`<span style="font-size:12px;color:#999">哪几天：</span>`;
+for(let d=0;d<7;d++)h+=`<label style="font-size:12px"><input type="checkbox" class="ld${i}" value="${d}"> ${WD[d]}</label>`;
+h+='</div>';
+});
+$('specialPanel').innerHTML=h;
 }
 function syncLeaves(){
-  leaves={};
-  EMPS.forEach((e,i)=>{
-    if(!$('lv'+i).checked)return;
-    const ds=[];document.querySelectorAll('.ld'+i).forEach(c=>{if(c.checked)ds.push(+c.value);});
-    if(ds.length)leaves[i]={type:$('lt'+i).value,days:ds};
-  });
+leaves={};
+EMPS.forEach((e,i)=>{
+if(!$('lv'+i)||!$('lv'+i).checked)return;
+const ds=[];document.querySelectorAll('.ld'+i).forEach(c=>{if(c.checked)ds.push(+c.value)});
+if(ds.length)leaves[i]={type:$('lt'+i).value,days:ds};
+});
 }
 
-/* ====================================================================
-   核心排班算法 v7
+/* ============================================================
+   核心排班算法 v10
    
-   铁律：
-   1. 每人班次不变（除非临时覆盖）
-   2. 大休=每人恰好2天休息，小休=每人恰好1天休息
-   3. 工作日每班必须满员（早1中2晚2）
-   4. 周末值班人数要均衡——周六和周日在岗人数尽量相等
-   5. 大休尽量安排连休（任意相邻2天，不限于周六日）
-   6. 小休时同班次拆半——一半周六休一半周日休，保证周六日值班人数相等
-   ==================================================================== */
+   规则：
+   1. 班次永远不变（除非手动临时覆盖）
+   2. 大休=每人2天休息，小休=每人1天休息，繁忙=0天但记录欠休
+   3. 工作日满员：早1 中2 晚2
+   4. 周末减半：早0-1 中1 晚1
+   5. 同班次周六日值班人数必须均衡
+   6. 大休尽量连休（任意相邻2天）
+   7. 小休同班次拆半（一半周六休一半周日休）
+   8. 繁忙周欠休在后续周自动补偿
+   ============================================================ */
 
 function doGenerate(){
-  const ds=$('weekStart').value;
-  if(!ds){toast('请先选择日期');return;}
-  const d=parse(ds);
-  // 自动修正到周一
-  const dow=d.getDay(),diff=dow===0?-6:1-dow;
-  wStart=addD(d,diff);
-  $('weekStart').value=fmt(wStart);
-  wType=$('weekType').value;
-  biz=$('bizLevel').value;
-  syncLeaves();
-  generateSchedule();
-  renderResult();
-  $('result').style.display='block';
-  toast('✅ 排班已生成，点击标签可手动微调');
+const ds=$('weekStart').value;
+if(!ds){toast('请先选择日期');return}
+let d=parse(ds);
+const dow=d.getDay(),diff=dow===0?-6:1-dow;
+const startMon=addD(d,diff);
+$('weekStart').value=fmt(startMon);
+syncLeaves();
+
+const numWeeks=+$('spanWeeks').value;
+allWeeks=[];
+let oweRest={};
+EMPS.forEach((e,i)=>oweRest[i]=0);
+
+for(let w=0;w<numWeeks;w++){
+const wMon=addD(startMon,w*7);
+const wTypeEl=$('wt_'+w);
+const bzEl=$('bz_'+w);
+const wType=wTypeEl?wTypeEl.value:'big';
+const bizLv=bzEl?bzEl.value:'normal';
+
+const sched=EMPS.map(()=>[true,true,true,true,true,true,true]);
+
+// 请假标记
+for(const[idx,info]of Object.entries(leaves)){
+for(const dd of info.days)sched[+idx][dd]=false;
 }
 
-function generateSchedule(){
-  // 初始化：全部上班
-  sched=EMPS.map(()=>[true,true,true,true,true,true,true]);
+const baseTarget=wType==='big'?2:wType==='small'?1:0;
 
-  // 先标记请假/调休
-  for(const [idx,info] of Object.entries(leaves)){
-    for(const d of info.days) sched[+idx][d]=false;
-  }
+if(wType==='busy'){
+// 繁忙：全员上班，累计欠休
+EMPS.forEach((e,i)=>{
+const shouldRest=2; // 按大休标准欠
+oweRest[i]+=shouldRest;
+});
+} else {
+// 正常排班
+const groups={morning:[],middle:[],night:[]};
+EMPS.forEach((e,i)=>groups[getShift(i)].push(i));
 
-  // 繁忙模式：除请假外全员上
-  if(biz==='busy') return;
+// 计算每人实际应休天数 = 基础 + 欠休补偿（最多额外补1天，避免一周补太多）
+const actualTarget={};
+EMPS.forEach((e,i)=>{
+const bonus=Math.min(oweRest[i],1);
+actualTarget[i]=baseTarget+bonus;
+});
 
-  const restTarget = wType==='big' ? 2 : 1;
+const seed=wMon.getFullYear()*1000+wMon.getMonth()*40+wMon.getDate();
+assignGroup(groups.morning,actualTarget,sched,seed,bizLv,'morning',1);
+assignGroup(groups.middle,actualTarget,sched,seed,bizLv,'middle',2);
+assignGroup(groups.night,actualTarget,sched,seed,bizLv,'night',2);
 
-  // 按生效班次分组
-  const groups={morning:[],middle:[],night:[]};
-  EMPS.forEach((e,i)=>groups[getShift(i)].push(i));
-
-  // === 早班（1人，罗凯或临时覆盖进来的） ===
-  assignRest_morning(groups.morning, restTarget);
-
-  // === 中班（2人） ===
-  assignRest_pair(groups.middle, restTarget);
-
-  // === 晚班（4人，工作日需2人） ===
-  assignRest_night(groups.night, restTarget);
+// 扣减已补偿的欠休
+EMPS.forEach((e,i)=>{
+const actual=countRest(sched,i);
+const base=baseTarget;
+const compensated=actual-base;
+if(compensated>0)oweRest[i]=Math.max(0,oweRest[i]-compensated);
+});
 }
 
-/* --- 早班：只有1人，大休给2天连休，小休给1天（优先周日） --- */
-function assignRest_morning(idxs, target){
-  for(const i of idxs){
-    const already = countRest(i);
-    const need = target - already;
-    if(need<=0) continue;
-
-    if(need===2){
-      // 大休：优先周六日连休，如果周末要上班则找工作日连休
-      if(biz==='light'){
-        // 宽松：周末不需要早班，直接周六日休
-        setRest(i,5); setRest(i,6);
-      } else {
-        // 正常：周末需要早班1人，但只有1人，所以周末必须有1天上班
-        // 给周五+周六连休，周日上班
-        setRest(i,4); setRest(i,5);
-      }
-    } else if(need===1){
-      // 小休：优先周日
-      setRest(i,6);
-    }
-  }
+allWeeks.push({monday:wMon,type:wType,biz:bizLv,sched:sched});
 }
 
-/* --- 中班（2人）：保证每天至少1人，周六日值班人数均衡 --- */
-function assignRest_pair(idxs, target){
-  if(idxs.length<2){
-    // 只有1人或0人
-    for(const i of idxs){
-      const need=target-countRest(i);
-      if(need>=2){setRest(i,5);setRest(i,6);}
-      else if(need===1) setRest(i,6);
-    }
-    return;
-  }
-
-  // 2人的情况
-  const a=idxs[0], b=idxs[1];
-  const aRest=countRest(a), bRest=countRest(b);
-  const aNeed=target-aRest, bNeed=target-bRest;
-
-  if(target===2){
-    // 大休：每人2天连休，但每天至少1人在
-    // 方案：A休周五+周六，B休周日+周一（跨周效果=本周周日休+下周初调整）
-    // 更好的方案：A休周六日，B休周四五（或反过来），用轮换种子决定
-    const seed = getWeekSeed();
-    if(seed%2===0){
-      // A周六日休，B周三四休
-      if(aNeed>=2){setRest(a,5);setRest(a,6);}
-      if(bNeed>=2){setRest(b,2);setRest(b,3);}
-    } else {
-      // B周六日休，A周三四休
-      if(bNeed>=2){setRest(b,5);setRest(b,6);}
-      if(aNeed>=2){setRest(a,2);setRest(a,3);}
-    }
-  } else {
-    // 小休：每人1天，拆半——A周六休B周日休（均衡！）
-    const seed = getWeekSeed();
-    if(seed%2===0){
-      if(aNeed>=1) setRest(a,5); // A周六休
-      if(bNeed>=1) setRest(b,6); // B周日休
-    } else {
-      if(aNeed>=1) setRest(a,6); // A周日休
-      if(bNeed>=1) setRest(b,5); // B周六休
-    }
-  }
+renderAllWeeks();
+$('result').style.display='block';
+toast('✅ 排班已生成（'+numWeeks+'周），点击标签可微调');
 }
 
-/* --- 晚班（4人，工作日需2人，周末需1人） ---
-   核心：周六和周日各安排的值班人数要均衡
-   大休：每人2天连休，4人的休息错开分布，保证每天2人在岗（周末1人）
-   小休：4人分2组，A组周六休B组周日休（各2人休），周六2人在岗周日2人在岗 --- */
-function assignRest_night(idxs, target){
-  if(idxs.length===0) return;
+/* 给某个班次组分配休息 */
+function assignGroup(idxs,targetMap,sched,seed,bizLv,shiftKey,weekdayNeed){
+if(!idxs.length)return;
+const n=idxs.length;
+const weekendNeed=shiftKey==='morning'?(bizLv==='light'?0:1):1;
 
-  // 先排除已有足够休息的（请假等）
-  const needRest = idxs.filter(i=>countRest(i)<target);
-  const alreadyDone = idxs.filter(i=>countRest(i)>=target);
-
-  if(target===1){
-    // === 小休：4人分2组，A组周六休B组周日休 ===
-    // 保证周六在岗2人，周日在岗2人（均衡！）
-    const seed = getWeekSeed();
-    const shuffled = shuffleWithSeed(needRest, seed);
-
-    const half = Math.ceil(shuffled.length/2);
-    const groupA = shuffled.slice(0, half);  // 周六休
-    const groupB = shuffled.slice(half);     // 周日休
-
-    for(const i of groupA){
-      if(countRest(i)<1) setRest(i, 5); // 周六
-    }
-    for(const i of groupB){
-      if(countRest(i)<1) setRest(i, 6); // 周日
-    }
-  } else {
-    // === 大休：每人2天连休，休息日错开分布 ===
-    // 4人各休2天 = 总共8个休息人·天
-    // 7天每天需2人在岗（周末1人），所以每天最多2人休息（工作日），周末最多3人休息
-    // 分配方案：让4人的连休区间错开
-    // 可选连休区间：[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]
-    // 约束：每天工作日至少2人，周末至少1人
-    
-    const seed = getWeekSeed();
-    // 4个可用的连休区间，让它们错开
-    // 经典方案：人1休[0,1]，人2休[2,3]，人3休[4,5]，人4休[5,6]
-    // 但[4,5]和[5,6]在周五重叠了→周五只剩2人，OK
-    // 而且周六有人3+人4休息（2人），在岗2人→OK
-    // 周日只有人4休息（1人），在岗3人→OK... 不均衡
-    
-    // 更好的方案，保证周六日均衡：
-    // 人1休[0,1]周一二，人2休[2,3]周三四，人3休[4,5]周五六，人4休[5,6]周六日
-    // 周六：人3+人4休→2人休2人在岗 ✓
-    // 周日：人4休→1人休3人在岗... 不均衡
-    
-    // 最均衡方案：
-    // 人1休[0,1]，人2休[2,3]，人3休[4,5]（周五六），人4休[6,0]（跨周→本周只休周日）
-    // 这样周六1人休，周日1人休 — 均衡！但人4跨周了
-    // 折中：人4本周休周日+周四（拆休），或者接受周六日各1人休
-    
-    // 最终方案：用预设的4个错开区间，每周轮换
-    const patterns = [
-      [[0,1],[2,3],[4,5],[5,6]], // 方案A
-      [[1,2],[3,4],[5,6],[0,6]], // 方案B（0和6=周一和周日）
-      [[0,1],[2,3],[4,5],[3,6]], // 方案C
-      [[1,2],[3,4],[0,5],[0,6]], // 方案D
-    ];
-    
-    // 简化：直接用验证过的均衡方案
-    // 4人休息分布，保证每天至少2人在岗（工作日），1人在岗（周末）
-    const validPatterns = findValidPatterns(needRest.length);
-    const patIdx = seed % validPatterns.length;
-    const chosen = validPatterns[patIdx];
-    
-    // 按seed打乱人员顺序，保证每周不同人休不同时间
-    const shuffled = shuffleWithSeed(needRest, seed);
-    
-    for(let j=0; j<shuffled.length; j++){
-      const empIdx = shuffled[j];
-      if(countRest(empIdx)>=2) continue;
-      const pair = chosen[j % chosen.length];
-      const need = 2 - countRest(empIdx);
-      if(need>=2){
-        setRest(empIdx, pair[0]);
-        setRest(empIdx, pair[1]);
-      } else if(need===1){
-        setRest(empIdx, pair[0]);
-      }
-    }
-  }
+if(n===1){
+// 只有1人（早班罗凯）
+const i=idxs[0];
+const target=targetMap[i]-countRest(sched,i);
+if(target<=0)return;
+if(target>=2){
+// 双休：优先周六日，但如果周末需要人则挪到工作日
+if(weekendNeed===0){setR(sched,i,5);setR(sched,i,6)}
+else{setR(sched,i,4);setR(sched,i,5)} // 周五六连休，周日上班
+}else{
+setR(sched,i,6); // 单休周日
+}
+return;
 }
 
-/* 生成有效的大休连休方案（4人每人休2天，每天工作日至少2人周末至少1人） */
-function findValidPatterns(n){
-  if(n<=0) return [[]];
-  if(n===1) return [[[5,6]]]; // 1人直接周六日
-  if(n===2) return [[[4,5],[5,6]],[[5,6],[3,4]],[[0,1],[5,6]]];
-  if(n===3) return [[[0,1],[2,3],[5,6]],[[1,2],[3,4],[5,6]],[[5,6],[0,1],[3,4]]];
-  
-  // 4人的均衡方案（每天在岗人数检验通过的）
-  // 穷举一些好方案
-  const good = [];
-  const pairs = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
-  
-  // 暴力验证
-  for(let a=0;a<pairs.length;a++){
-    for(let b=0;b<pairs.length;b++){
-      for(let c=0;c<pairs.length;c++){
-        for(let d=0;d<pairs.length;d++){
-          // 检查每天休息人数
-          const restCount=[0,0,0,0,0,0,0];
-          for(const day of pairs[a]) restCount[day]++;
-          for(const day of pairs[b]) restCount[day]++;
-          for(const day of pairs[c]) restCount[day]++;
-          for(const day of pairs[d]) restCount[day]++;
-          
-          let ok=true;
-          for(let dd=0;dd<7;dd++){
-            const onDuty = n - restCount[dd];
-            if(dd<5 && onDuty<2){ok=false;break;} // 工作日至少2人
-            if(dd>=5 && onDuty<1){ok=false;break;} // 周末至少1人
-          }
-          if(!ok) continue;
-          
-          // 周六和周日的在岗人数差不超过1（均衡）
-          const satOn = n - restCount[5];
-          const sunOn = n - restCount[6];
-          if(Math.abs(satOn-sunOn)>1) continue;
-          
-          // 4个区间不能完全相同（避免4人休同一天）
-          const key = [a,b,c,d].sort().join(',');
-          if(!good.some(g=>g.key===key)){
-            good.push({key, pattern:[pairs[a],pairs[b],pairs[c],pairs[d]]});
-          }
-          if(good.length>=20) break; // 够用了
-        }
-        if(good.length>=20) break;
-      }
-      if(good.length>=20) break;
-    }
-    if(good.length>=20) break;
-  }
-  
-  if(good.length===0){
-    // 兜底方案
-    return [[[0,1],[2,3],[4,5],[5,6]]];
-  }
-  return good.map(g=>g.pattern);
+if(n===2){
+// 中班2人：保证每天至少1人在岗
+const a=idxs[0],b=idxs[1];
+const tA=targetMap[a]-countRest(sched,a);
+const tB=targetMap[b]-countRest(sched,b);
+const s2=seed%2;
+
+if(tA>=2&&tB>=2){
+// 都要休2天（大休或大休+补休）
+// A休周六日值班，B休周三四（或反过来），保证每天1人在
+if(s2===0){
+if(tA>=2){setR(sched,a,5);setR(sched,a,6)}
+if(tB>=2){setR(sched,b,2);setR(sched,b,3)}
+}else{
+if(tB>=2){setR(sched,b,5);setR(sched,b,6)}
+if(tA>=2){setR(sched,a,2);setR(sched,a,3)}
+}
+}else if(tA>=2){
+setR(sched,a,5);setR(sched,a,6);
+if(tB>=1)setR(sched,b,s2===0?2:3);
+}else if(tB>=2){
+setR(sched,b,5);setR(sched,b,6);
+if(tA>=1)setR(sched,a,s2===0?2:3);
+}else{
+// 都只休1天 → 拆半均衡
+if(s2===0){if(tA>=1)setR(sched,a,5);if(tB>=1)setR(sched,b,6)}
+else{if(tA>=1)setR(sched,a,6);if(tB>=1)setR(sched,b,5)}
+}
+return;
 }
 
-/* 辅助 */
-function countRest(i){return sched[i].reduce((c,v)=>c+(!v?1:0),0);}
-function setRest(i,d){sched[i][d]=false;}
-function getWeekSeed(){
-  if(!wStart) return 0;
-  const y=wStart.getFullYear(),m=wStart.getMonth(),d=wStart.getDate();
-  return y*1000+m*40+d; // 简单种子，不同周不同值
+// n>=3（晚班4人）
+const shuffled=shuffleS([...idxs],seed);
+const maxTarget=Math.max(...idxs.map(i=>targetMap[i]-countRest(sched,i)));
+
+if(maxTarget<=1){
+// 每人只休1天 → 拆半均衡：一半周六一半周日
+const half=Math.ceil(shuffled.length/2);
+for(let j=0;j<shuffled.length;j++){
+const i=shuffled[j];
+if(targetMap[i]-countRest(sched,i)<1)continue;
+setR(sched,i,j<half?5:6);
 }
-function shuffleWithSeed(arr, seed){
-  const a=[...arr];
-  // Fisher-Yates 用确定性种子
-  let s=seed;
-  const rng=()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};
-  for(let i=a.length-1;i>0;i--){
-    const j=Math.floor(rng()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
-  }
-  return a;
+}else{
+// 每人休2+天 → 用错开的连休区间
+// 保证工作日每天>=weekdayNeed人，周末>=weekendNeed人
+// 周六日在岗人数差<=1
+const patterns=genPatterns(n,weekdayNeed,weekendNeed);
+const pi=seed%Math.max(1,patterns.length);
+const pat=patterns[pi]||patterns[0];
+
+for(let j=0;j<shuffled.length;j++){
+const i=shuffled[j];
+const need=targetMap[i]-countRest(sched,i);
+if(need<=0)continue;
+const pair=pat[j%pat.length];
+if(need>=2){setR(sched,i,pair[0]);setR(sched,i,pair[1])}
+else{setR(sched,i,pair[0])}
 }
-
-/* ===== 渲染排班结果 ===== */
-function renderResult(){
-  renderTable();
-  renderAnalysis();
-  renderSuggestions();
-  renderBalance();
 }
-
-function renderTable(){
-  const t=$('scheduleTable');
-  const dates=[];for(let i=0;i<7;i++)dates.push(addD(wStart,i));
-  
-  let h='<thead><tr><th style="min-width:80px;">姓名</th>';
-  dates.forEach((d,i)=>{
-    const cls=i>=5?'weekend':'';
-    h+=`<th class="${cls}">${WD[i]}<br><span class="date">${d.getMonth()+1}/${d.getDate()}</span></th>`;
-  });
-  h+='<th style="min-width:90px;">本周状态</th></tr></thead><tbody>';
-
-  // 按班次分组
-  const gm={morning:[],middle:[],night:[]};
-  EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
-
-  for(const s of ['morning','middle','night']){
-    const idxs=gm[s];if(!idxs.length)continue;
-    const si=SI[s];
-    h+=`<tr class="group-sep"><td colspan="9">${si.emoji} ${si.full} ${si.time}</td></tr>`;
-    for(const i of idxs){
-      const a=analyze(i);
-      h+='<tr>';
-      h+=`<td class="name-cell">${EMPS[i].name}${overrides[i]?'<span class="override-badge">临</span>':''}</td>`;
-      for(let d=0;d<7;d++){
-        const lv=onLeave(i,d);
-        let badge;
-        if(lv){
-          const lt=leaves[i]?.type;
-          badge=`<span class="badge leave-b" onclick="toggle(${i},${d})">${lt==='leave'?'假':'调'}</span>`;
-        } else if(sched[i][d]){
-          badge=`<span class="badge ${s}" onclick="toggle(${i},${d})">${si.label}</span>`;
-        } else {
-          badge=`<span class="badge rest" onclick="toggle(${i},${d})">休</span>`;
-        }
-        h+=`<td>${badge}</td>`;
-      }
-      h+=`<td>${statusTag(a)}</td></tr>`;
-    }
-  }
-
-  // 统计行
-  h+='<tr class="stat-row stat-total"><td style="text-align:right;font-weight:600;">在岗总人数</td>';
-  for(let d=0;d<7;d++){let c=0;EMPS.forEach((e,i)=>{if(sched[i][d])c++;});h+=`<td>${c}人</td>`;}
-  h+='<td></td></tr>';
-  
-  for(const s of ['morning','middle','night']){
-    const idxs=gm[s];if(!idxs.length)continue;
-    const si=SI[s];
-    const wdNeed=s==='morning'?1:2;
-    const weNeed=s==='morning'?(biz==='light'?0:1):1;
-    h+=`<tr class="stat-row"><td style="text-align:right;font-size:11px;">${si.label}班</td>`;
-    for(let d=0;d<7;d++){
-      let c=0;for(const i of idxs)if(sched[i][d])c++;
-      const need=d<5?wdNeed:weNeed;
-      h+=`<td class="${c<need?'short':''}">${c}/${need}人</td>`;
-    }
-    h+='<td></td></tr>';
-  }
-  h+='</tbody>';
-  t.innerHTML=h;
-
-  const e=addD(wStart,6);
-  const ts=wType==='big'?'大休（双休）':'小休（单休）';
-  $('resultHeader').innerHTML=`📊 排班结果 <span style="font-size:13px;color:#999;font-weight:400;">${wStart.getMonth()+1}/${wStart.getDate()} - ${e.getMonth()+1}/${e.getDate()} · ${ts}</span>`;
 }
 
-/* ===== 分析每个人 ===== */
-function analyze(i){
-  const s=sched[i];
-  const rest=[],work=[];
-  for(let d=0;d<7;d++){if(s[d])work.push(d);else rest.push(d);}
-  
-  let type,label,desc;
-  if(rest.length===0){
-    type='none';label='⛔ 无休';desc='本周无休息';
-  } else if(rest.length===1){
-    type='single';label='🟡 单休';desc=`${WD[rest[0]]}休息`;
-  } else {
-    const sorted=[...rest].sort((a,b)=>a-b);
-    let linked=false;
-    for(let j=0;j<sorted.length-1;j++){if(sorted[j+1]-sorted[j]===1)linked=true;}
-    if(sorted.includes(0)&&sorted.includes(6))linked=true; // 跨周连休
-
-    if(rest.length===2){
-      if(sorted[0]===5&&sorted[1]===6){type='double';label='🟢 双休';desc='周六+周日连休';}
-      else if(linked){type='linked';label='🔵 连休';desc=sorted.map(d=>WD[d]).join('+')+'连休';}
-      else{type='split';label='🟠 拆休';desc=sorted.map(d=>WD[d]).join('、')+'分开休';}
-    } else {
-      if(linked){type='linked';label=`🔵 连休${rest.length}天`;desc=sorted.map(d=>WD[d]).join('+');}
-      else{type='split';label=`🟠 拆休${rest.length}天`;desc=sorted.map(d=>WD[d]).join('、');}
-    }
-  }
-
-  let maxCon=0,cur=0;
-  for(let d=0;d<7;d++){if(s[d]){cur++;maxCon=Math.max(maxCon,cur);}else cur=0;}
-
-  return {rest,work,type,label,desc,maxCon,totalWork:work.length,totalRest:rest.length};
+function genPatterns(n,wdN,weN){
+const pairs=[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6]];
+const good=[];
+// 对于4人，穷举所有4对组合
+const combo=(arr,k,start,cur)=>{
+if(cur.length===k){
+const rc=[0,0,0,0,0,0,0];
+for(const p of cur)for(const d of p)rc[d]++;
+let ok=true;
+for(let d=0;d<7;d++){
+const on=n-rc[d];
+if(d<5&&on<wdN){ok=false;break}
+if(d>=5&&on<weN){ok=false;break}
+}
+if(!ok)return;
+const satOn=n-rc[5],sunOn=n-rc[6];
+if(Math.abs(satOn-sunOn)>1)return;
+good.push([...cur]);
+return;
+}
+for(let i=start;i<arr.length;i++){
+cur.push(arr[i]);
+combo(arr,k,i,cur); // 允许重复选同一对（不同人可以同时段休息）
+cur.pop();
+}
+};
+combo(pairs,Math.min(n,4),0,[]);
+if(!good.length)good.push([[0,1],[2,3],[4,5],[5,6]]);
+return good;
 }
 
-function statusTag(a){
-  return `<span class="rest-tag ${a.type}">${a.label}</span>`;
+function countRest(sched,i){let c=0;for(let d=0;d<7;d++)if(!sched[i][d])c++;return c}
+function setR(sched,i,d){sched[i][d]=false}
+function shuffleS(arr,seed){
+let s=seed;
+const rng=()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff};
+for(let i=arr.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}
+return arr;
 }
 
-/* ===== 分析面板 ===== */
-function renderAnalysis(){
-  let h='';
-  EMPS.forEach((e,i)=>{
-    const a=analyze(i);
-    const s=getShift(i),si=SI[s];
-    const isOvr=overrides[i]!==undefined;
-    h+=`<div class="pcard">`;
-    h+=`<div class="pname">${e.name} ${statusTag(a)}</div>`;
-    h+=`<div class="pshift">${si.emoji} ${si.full} ${si.time}${isOvr?` <span style="color:#ff4d4f;font-size:11px;">（原${SI[e.shift].full}，临时调整）</span>`:''}</div>`;
-    h+=`<div class="pstats">`;
-    h+=`<div>📅 上班 <strong>${a.totalWork}</strong>天 · 休息 <strong>${a.totalRest}</strong>天</div>`;
-    h+=`<div>🔗 最长连续 <strong>${a.maxCon}</strong>天</div>`;
-    h+=`<div>📝 ${a.desc}</div>`;
-    h+=`</div>`;
-    h+=`<div class="week-bar">${sched[i].map((w,d)=>{
-      if(w)return `<span style="background:${si.label==='早'?'#fff7e6':si.label==='中'?'#e6f7ff':'#f3e8ff'};color:${si.label==='早'?'#d48806':si.label==='中'?'#0070c0':'#722ed1'};">${WD[d].slice(1)}${si.label}</span>`;
-      return `<span style="background:#f6ffed;color:#52c41a;">${WD[d].slice(1)}休</span>`;
-    }).join('')}</div>`;
-    h+=`</div>`;
-  });
-  $('analysisGrid').innerHTML=h;
+/* ====== 渲染所有周 ====== */
+function renderAllWeeks(){
+let h='';
+allWeeks.forEach((wk,wi)=>{
+const end=addD(wk.monday,6);
+const tl=wk.type==='big'?'大休（双休）':wk.type==='small'?'小休（单休）':'繁忙（全员上）';
+h+=`<div class="week-section"><h3>第${wi+1}周：${wk.monday.getMonth()+1}/${wk.monday.getDate()} - ${end.getMonth()+1}/${end.getDate()} · ${tl}</h3>`;
+h+=`<div style="overflow-x:auto"><table class="schedule-table">`;
+h+=renderWeekTable(wk,wi);
+h+=`</table></div></div>`;
+});
+$('weeksContainer').innerHTML=h;
+renderSummary();
+renderAnalysisAll();
+renderSuggestionsAll();
+const end=addD(allWeeks[0].monday,allWeeks.length*7-1);
+$('resultHeader').innerHTML='📊 排班结果 <span style="font-size:13px;color:#999;font-weight:400">'+allWeeks[0].monday.getMonth()+1+'/'+allWeeks[0].monday.getDate()+' - '+end.getMonth()+1+'/'+end.getDate()+' · '+allWeeks.length+'周</span>';
 }
 
-/* ===== 周六日均衡度展示 ===== */
-function renderBalance(){
-  const gm={morning:[],middle:[],night:[]};
-  EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
-  
-  let h='<div class="balance-bar"><h3>📊 周六/周日值班均衡度</h3>';
-  
-  for(const s of ['morning','middle','night']){
-    const idxs=gm[s];if(!idxs.length)continue;
-    const si=SI[s];
-    let satOn=0,sunOn=0;
-    for(const i of idxs){if(sched[i][5])satOn++;if(sched[i][6])sunOn++;}
-    const total=idxs.length;
-    const satPct=Math.round(satOn/total*100);
-    const sunPct=Math.round(sunOn/total*100);
-    const diff=Math.abs(satOn-sunOn);
-    const icon=diff===0?'✅':diff===1?'🟡':'🔴';
-    
-    h+=`<div class="balance-row">`;
-    h+=`<span class="blabel">${si.emoji}${si.label}班</span>`;
-    h+=`<div class="bbar">`;
-    h+=`<div class="seg" style="width:50%;background:${satOn>=sunOn?'#52c41a':'#faad14'};font-size:12px;">周六 ${satOn}人</div>`;
-    h+=`<div class="seg" style="width:50%;background:${sunOn>=satOn?'#52c41a':'#faad14'};font-size:12px;">周日 ${sunOn}人</div>`;
-    h+=`</div>`;
-    h+=`<span>${icon} 差${diff}</span>`;
-    h+=`</div>`;
-  }
-  
-  // 总计
-  let tSat=0,tSun=0;
-  EMPS.forEach((e,i)=>{if(sched[i][5])tSat++;if(sched[i][6])tSun++;});
-  const tDiff=Math.abs(tSat-tSun);
-  h+=`<div class="balance-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;">`;
-  h+=`<span class="blabel" style="font-weight:700;">合计</span>`;
-  h+=`<div class="bbar">`;
-  h+=`<div class="seg" style="width:50%;background:#1890ff;">周六 ${tSat}人</div>`;
-  h+=`<div class="seg" style="width:50%;background:#722ed1;">周日 ${tSun}人</div>`;
-  h+=`</div>`;
-  h+=`<span>${tDiff===0?'✅ 完全均衡':tDiff===1?'🟡 基本均衡':'🔴 不均衡'}</span>`;
-  h+=`</div></div>`;
-  
-  $('balanceArea').innerHTML=h;
+function renderWeekTable(wk,wi){
+const dates=[];for(let i=0;i<7;i++)dates.push(addD(wk.monday,i));
+let h='<thead><tr><th style="min-width:80px">姓名</th>';
+dates.forEach((d,i)=>{
+h+=`<th class="${i>=5?'weekend':''}">${WD[i]}<br><span class="date">${d.getMonth()+1}/${d.getDate()}</span></th>`;
+});
+h+='<th style="min-width:90px">状态</th></tr></thead><tbody>';
+
+const gm={morning:[],middle:[],night:[]};
+EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
+
+for(const s of['morning','middle','night']){
+const idxs=gm[s];if(!idxs.length)continue;
+const si=SI[s];
+h+=`<tr class="group-sep"><td colspan="9">${si.emoji} ${si.full} ${si.time}</td></tr>`;
+for(const i of idxs){
+const a=analyzeOne(wk.sched,i);
+h+='<tr>';
+h+=`<td class="name-cell">${EMPS[i].name}</td>`;
+for(let d=0;d<7;d++){
+if(wk.sched[i][d])h+=`<td><span class="badge ${s}" onclick="toggleCell(${wi},${i},${d})">${si.label}</span></td>`;
+else h+=`<td><span class="badge rest" onclick="toggleCell(${wi},${i},${d})">休</span></td>`;
+}
+h+=`<td>${statusTag(a)}</td></tr>`;
+}
 }
 
-/* ===== 建议 ===== */
-function renderSuggestions(){
-  const ss=[];
-  const target=wType==='big'?2:1;
-  
-  EMPS.forEach((e,i)=>{
-    const a=analyze(i);
-    if(a.type==='none')ss.push({lv:'error',t:`${e.name} 本周没有任何休息！请立即调整。`});
-    if(a.totalRest>target+1)ss.push({lv:'warn',t:`${e.name} 休息${a.totalRest}天，超标准${target}天，其他同事可能要多上班。`});
-    if(a.totalRest<target&&a.totalRest>0)ss.push({lv:'warn',t:`${e.name} 只休${a.totalRest}天，低于标准${target}天，建议增加休息。`});
-    if(a.maxCon>=6)ss.push({lv:'error',t:`${e.name} 连续工作${a.maxCon}天，有过劳风险！`});
-    else if(a.maxCon===5)ss.push({lv:'warn',t:`${e.name} 连续工作5天，注意下周衔接。`});
-    if(a.type==='split')ss.push({lv:'warn',t:`${e.name} 休息日被拆开（${a.desc}），建议调成连休。`});
-    if(overrides[i])ss.push({lv:'warn',t:`${e.name} 本周从${SI[e.shift].full}临时调至${SI[overrides[i]].full}，注意生物钟。`});
-  });
-  
-  // 班次覆盖检查
-  const gm={morning:[],middle:[],night:[]};
-  EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
-  for(const s of ['morning','middle','night']){
-    const idxs=gm[s];if(!idxs.length)continue;
-    const si=SI[s];
-    const wdN=s==='morning'?1:2;
-    const weN=s==='morning'?(biz==='light'?0:1):1;
-    for(let d=0;d<7;d++){
-      let c=0;for(const i of idxs)if(sched[i][d])c++;
-      const need=d<5?wdN:weN;
-      if(c<need)ss.push({lv:'warn',t:`${WD[d]} ${si.full}在岗${c}人，需求${need}人，人手不足！`});
-    }
-  }
-  
-  // 周六日均衡检查
-  for(const s of ['morning','middle','night']){
-    const idxs=gm[s];if(idxs.length<2)continue;
-    let satOn=0,sunOn=0;
-    for(const i of idxs){if(sched[i][5])satOn++;if(sched[i][6])sunOn++;}
-    if(Math.abs(satOn-sunOn)>1){
-      ss.push({lv:'warn',t:`${SI[s].full}周六${satOn}人/周日${sunOn}人，差距过大，建议调整。`});
-    }
-  }
-  
-  if(!ss.length)ss.push({lv:'ok',t:'✅ 排班良好，班次覆盖充足，休息均衡合理。'});
-  $('suggestions').innerHTML=ss.map(s=>`<li class="${s.lv}"><span>${s.lv==='error'?'🔴':s.lv==='warn'?'🟡':'🟢'}</span><span>${s.t}</span></li>`).join('');
+// 统计行
+h+='<tr class="stat-row stat-total"><td style="text-align:right;font-weight:600">在岗</td>';
+for(let d=0;d<7;d++){let c=0;EMPS.forEach((e,i)=>{if(wk.sched[i][d])c++});h+=`<td>${c}人</td>`}
+h+='<td></td></tr>';
+
+for(const s of['morning','middle','night']){
+const idxs=gm[s];if(!idxs.length)continue;
+const si=SI[s];
+const wdN=s==='morning'?1:2;
+const weN=s==='morning'?(wk.biz==='light'?0:1):1;
+h+=`<tr class="stat-row"><td style="text-align:right;font-size:11px">${si.label}班</td>`;
+for(let d=0;d<7;d++){
+let c=0;for(const i of idxs)if(wk.sched[i][d])c++;
+const need=d<5?wdN:(wk.type==='busy'?wdN:weN);
+h+=`<td class="${c<need?'short':''}">${c}/${need}</td>`;
+}
+h+='<td></td></tr>';
+}
+h+='</tbody>';
+return h;
 }
 
-/* ===== 手动微调 ===== */
-function toggle(i,d){
-  sched[i][d]=!sched[i][d];
-  renderResult();
-  toast(`${EMPS[i].name} ${WD[d]} → ${sched[i][d]?'上班':'休息'}`);
+function toggleCell(wi,ei,d){
+allWeeks[wi].sched[ei][d]=!allWeeks[wi].sched[ei][d];
+renderAllWeeks();
+toast(EMPS[ei].name+' '+WD[d]+' → '+(allWeeks[wi].sched[ei][d]?'上班':'休息'));
 }
 
-/* ===== 导出 ===== */
+/* 分析 */
+function analyzeOne(sched,i){
+const rest=[],work=[];
+for(let d=0;d<7;d++){if(sched[i][d])work.push(d);else rest.push(d)}
+let type,label,desc;
+if(rest.length===0){type='none';label='⛔ 无休';desc='无休息'}
+else if(rest.length===1){type='single';label='🟡 单休';desc=WD[rest[0]]+'休'}
+else{
+const sorted=[...rest].sort((a,b)=>a-b);
+let linked=false;
+for(let j=0;j<sorted.length-1;j++)if(sorted[j+1]-sorted[j]===1)linked=true;
+if(sorted.includes(0)&&sorted.includes(6))linked=true;
+if(rest.length===2){
+if(sorted[0]===5&&sorted[1]===6){type='double';label='🟢 双休';desc='周六+周日'}
+else if(linked){type='linked';label='🔵 连休';desc=sorted.map(d=>WD[d]).join('+')}
+else{type='split';label='🟠 拆休';desc=sorted.map(d=>WD[d]).join('、')}
+}else{
+type=linked?'linked':'split';
+label=(linked?'🔵 连休':'🟠 拆休')+rest.length+'天';
+desc=sorted.map(d=>WD[d]).join(linked?'+':'、');
+}
+}
+let maxCon=0,cur=0;
+for(let d=0;d<7;d++){if(sched[i][d]){cur++;maxCon=Math.max(maxCon,cur)}else cur=0}
+return{rest,work,type,label,desc,maxCon,totalWork:work.length,totalRest:rest.length};
+}
+function statusTag(a){return'<span class="rest-tag '+a.type+'">'+a.label+'</span>'}
+
+/* 多周总览 */
+function renderSummary(){
+let h='<table class="summary-table"><thead><tr><th>姓名</th><th>班次</th>';
+allWeeks.forEach((w,i)=>h+=`<th>第${i+1}周</th>`);
+h+='<th>总上班</th><th>总休息</th><th>应休</th><th>差额</th></tr></thead><tbody>';
+EMPS.forEach((e,i)=>{
+const si=SI[getShift(i)];
+let tw=0,tr=0,shouldRest=0;
+h+=`<tr><td style="font-weight:600">${e.name}</td><td>${si.emoji}${si.label}</td>`;
+allWeeks.forEach(wk=>{
+const a=analyzeOne(wk.sched,i);
+tw+=a.totalWork;tr+=a.totalRest;
+shouldRest+=wk.type==='big'?2:wk.type==='small'?1:2;
+h+=`<td>${statusTag(a)}</td>`;
+});
+const diff=tr-shouldRest;
+const cls=diff<0?'warn-cell':diff===0?'good-cell':'';
+h+=`<td>${tw}天</td><td>${tr}天</td><td>${shouldRest}天</td>`;
+h+=`<td class="${cls}">${diff>0?'+':''}${diff}天</td></tr>`;
+});
+h+='</tbody></table>';
+$('summaryArea').innerHTML=h;
+}
+
+function renderAnalysisAll(){
+let h='';
+EMPS.forEach((e,i)=>{
+const si=SI[getShift(i)];
+let tw=0,tr=0;
+const weekBars=allWeeks.map((wk,wi)=>{
+const a=analyzeOne(wk.sched,i);
+tw+=a.totalWork;tr+=a.totalRest;
+return `<div style="font-size:11px;margin-bottom:2px">W${wi+1}: ${a.label} ${a.desc||''}</div>`;
+}).join('');
+h+=`<div class="pcard"><div class="pname">${e.name}</div>`;
+h+=`<div class="pshift">${si.emoji} ${si.full}</div>`;
+h+=`<div class="pstats"><div>📅 总上班 <strong>${tw}</strong>天 · 总休息 <strong>${tr}</strong>天</div></div>`;
+h+=`<div style="margin-top:6px">${weekBars}</div></div>`;
+});
+$('analysisGrid').innerHTML=h;
+}
+
+function renderSuggestionsAll(){
+const ss=[];
+EMPS.forEach((e,i)=>{
+let totalRest=0,totalWork=0,maxConsec=0;
+allWeeks.forEach(wk=>{
+const a=analyzeOne(wk.sched,i);
+totalRest+=a.totalRest;totalWork+=a.totalWork;
+if(a.type==='none')ss.push({lv:'error',t:`${e.name} 第${allWeeks.indexOf(wk)+1}周无休息！`});
+if(a.type==='split')ss.push({lv:'warn',t:`${e.name} 第${allWeeks.indexOf(wk)+1}周休息被拆开（${a.desc}），建议调成连休`});
+if(a.maxCon>=6)ss.push({lv:'error',t:`${e.name} 第${allWeeks.indexOf(wk)+1}周连续工作${a.maxCon}天`});
+});
+const shouldRest=allWeeks.reduce((s,w)=>s+(w.type==='big'?2:w.type==='small'?1:2),0);
+const diff=totalRest-shouldRest;
+if(diff<-1)ss.push({lv:'warn',t:`${e.name} 总共少休了${-diff}天，建议后续补休`});
+if(diff>1)ss.push({lv:'warn',t:`${e.name} 总共多休了${diff}天，注意公平性`});
+});
+
+// 班次覆盖
+const gm={morning:[],middle:[],night:[]};
+EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
+allWeeks.forEach((wk,wi)=>{
+for(const s of['morning','middle','night']){
+const idxs=gm[s];if(!idxs.length)continue;
+const wdN=s==='morning'?1:2;
+const weN=s==='morning'?(wk.biz==='light'?0:1):1;
+for(let d=0;d<7;d++){
+let c=0;for(const ii of idxs)if(wk.sched[ii][d])c++;
+const need=d<5?wdN:(wk.type==='busy'?wdN:weN);
+if(c<need)ss.push({lv:'warn',t:`第${wi+1}周${WD[d]} ${SI[s].full}缺${need-c}人`});
+}
+}
+});
+
+if(!ss.length)ss.push({lv:'ok',t:'排班良好，班次覆盖充足，休息均衡。'});
+$('suggestions').innerHTML=ss.map(s=>`<li class="${s.lv}"><span>${s.lv==='error'?'🔴':s.lv==='warn'?'🟡':'🟢'}</span><span>${s.t}</span></li>`).join('');
+}
+
 function exportCSV(){
-  if(!wStart)return;
-  let csv='\uFEFF姓名,固定班次,本周班次';
-  for(let i=0;i<7;i++){const d=addD(wStart,i);csv+=`,${WD[i]}(${d.getMonth()+1}/${d.getDate()})`;}
-  csv+=',状态\n';
-  EMPS.forEach((e,i)=>{
-    const ds=SI[e.shift],es=SI[getShift(i)];
-    csv+=`${e.name},${ds.full},${es.full}`;
-    for(let d=0;d<7;d++){
-      if(onLeave(i,d))csv+=`,${leaves[i]?.type==='leave'?'请假':'调休'}`;
-      else csv+=`,${sched[i][d]?es.label+'班':'休息'}`;
-    }
-    csv+=`,${analyze(i).label.replace(/[🟢🟡🔵🟠⛔]/g,'').trim()}\n`;
-  });
-  const b=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);
-  a.download=`排班表_${fmt(wStart)}.csv`;a.click();
-  toast('📥 已导出');
+if(!allWeeks.length)return;
+let csv='\uFEFF';
+allWeeks.forEach((wk,wi)=>{
+csv+='第'+(wi+1)+'周 ('+wk.type+')\n';
+csv+='姓名';
+for(let d=0;d<7;d++){const dt=addD(wk.monday,d);csv+=','+WD[d]+'('+dt.getMonth()+1+'/'+dt.getDate()+')';}
+csv+=',状态\n';
+EMPS.forEach((e,i)=>{
+const si=SI[getShift(i)];
+csv+=e.name;
+for(let d=0;d<7;d++)csv+=','+(wk.sched[i][d]?si.label+'班':'休息');
+csv+=','+analyzeOne(wk.sched,i).label.replace(/[🟢🟡🔵🟠⛔]/g,'').trim()+'\n';
+});
+csv+='\n';
+});
+const b=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+const a=document.createElement('a');a.href=URL.createObjectURL(b);
+a.download='排班表_'+fmt(allWeeks[0].monday)+'.csv';a.click();
+toast('📥 已导出');
 }
 
-/* ===== 历史 ===== */
 function saveToHistory(){
-  if(!wStart)return;
-  const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
-  const r={weekStart:fmt(wStart),wType,biz,sched:JSON.parse(JSON.stringify(sched)),leaves:JSON.parse(JSON.stringify(leaves)),overrides:JSON.parse(JSON.stringify(overrides)),savedAt:new Date().toLocaleString('zh-CN')};
-  const ei=h.findIndex(x=>x.weekStart===r.weekStart);
-  if(ei>=0)h[ei]=r;else h.unshift(r);
-  if(h.length>20)h.pop();
-  localStorage.setItem('shift_hist',JSON.stringify(h));
-  renderHistory();toast('💾 已保存');
-}
-function renderHistory(){
-  const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
-  if(!h.length){$('historyList').innerHTML='<div style="text-align:center;color:#ccc;padding:20px;">暂无记录</div>';return;}
-  $('historyList').innerHTML=h.map(r=>`<div class="history-item" onclick="loadHist('${r.weekStart}')"><span>📅 ${r.weekStart} · ${r.wType==='big'?'大休':'小休'}</span><span class="meta">${r.savedAt}</span></div>`).join('');
-}
-function loadHist(ws){
-  const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
-  const r=h.find(x=>x.weekStart===ws);if(!r)return;
-  wStart=parse(r.weekStart);wType=r.wType;biz=r.biz;sched=r.sched;leaves=r.leaves||{};overrides=r.overrides||{};
-  $('weekStart').value=r.weekStart;$('weekType').value=r.wType;$('bizLevel').value=r.biz;
-  renderEmpCard();renderResult();$('result').style.display='block';toast('📂 已加载');
+if(!allWeeks.length)return;
+const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
+const r={start:fmt(allWeeks[0].monday),weeks:allWeeks.map(w=>({monday:fmt(w.monday),type:w.type,biz:w.biz,sched:w.sched})),savedAt:new Date().toLocaleString('zh-CN')};
+h.unshift(r);if(h.length>10)h.pop();
+localStorage.setItem('shift_hist',JSON.stringify(h));
+toast('💾 已保存');
 }
 </script>
 </body>
