@@ -23,6 +23,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .emp-tag .gear-btn{display:none;position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#667eea;color:#fff;font-size:10px;line-height:18px;text-align:center;cursor:pointer;border:none}
 .emp-tag:hover .gear-btn{display:block}
 .override-badge{display:inline-block;font-size:10px;background:#ff4d4f;color:#fff;padding:0 5px;border-radius:8px;margin-left:4px}
+.link-card{background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1px solid #a5d6a7;border-radius:10px;padding:16px;margin-bottom:16px}
+.link-card h3{font-size:14px;color:#2e7d32;margin-bottom:10px}
+.link-card .info{font-size:13px;color:#555;margin-bottom:6px}
+.link-card .debt-tag{display:inline-block;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px}
+.link-card .actions{margin-top:10px;display:flex;gap:8px}
+.link-card .actions button{padding:6px 16px;border-radius:6px;font-size:13px;cursor:pointer;border:none;font-weight:600}
+.btn-apply{background:#4caf50;color:#fff}
+.btn-ignore{background:#e0e0e0;color:#666}
 .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:1000;justify-content:center;align-items:center}
 .modal-overlay.open{display:flex}
 .modal{background:#fff;border-radius:14px;padding:28px;width:340px;box-shadow:0 8px 30px rgba(0,0,0,.2)}
@@ -45,7 +53,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .control-item{display:flex;flex-direction:column;gap:4px}
 .control-item label{font-size:13px;color:#666;font-weight:500}
 .control-item select,.control-item input[type="date"]{padding:8px 12px;border:1px solid #d9d9d9;border-radius:8px;font-size:14px;background:#fff;cursor:pointer}
-.control-item select:focus,.control-item input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.15)}
 .btn-generate{padding:10px 28px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap}
 .btn-generate:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(102,126,234,.4)}
 .week-configs{margin-top:16px;display:flex;flex-wrap:wrap;gap:12px}
@@ -111,8 +118,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 </head>
 <body>
 <div class="container">
-<div class="header"><h1>📋 排班助手</h1><p>固定班次 · 大小休4周循环 · 多周排班 · 手动微调 · 调整追踪 · 实时分析</p></div>
+<div class="header"><h1>📋 排班助手</h1><p>固定班次 · 大小休4周循环 · 月份衔接 · 手动微调 · 欠休追踪</p></div>
 <div class="card" id="empCard"></div>
+<div id="linkArea"></div>
 <div class="card">
 <h2>⚙️ 排班设置</h2>
 <div class="controls">
@@ -131,11 +139,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 <h2 id="resultHeader">📊 排班结果</h2>
 <div style="margin-bottom:12px">
 <button class="btn-export" style="background:#52c41a" onclick="exportCSV()">📥 导出CSV</button>
-<button class="btn-export" style="background:#1890ff" onclick="saveToHistory()">💾 保存记录</button>
+<button class="btn-export" style="background:#1890ff" onclick="saveAndLink()">💾 保存并记录衔接</button>
 </div>
 <div id="weeksContainer"></div>
 </div>
-<div class="card"><h2>📊 4周总览</h2><div id="summaryArea"></div></div>
+<div class="card"><h2>📊 周期总览</h2><div id="summaryArea"></div></div>
 <div class="card"><h2>📋 调整追踪</h2><div id="adjustLog"></div></div>
 <div class="card"><h2>🔍 休息状态一览</h2><div class="analysis-grid" id="analysisGrid"></div></div>
 <div class="card"><h2>💡 智能建议</h2><ul class="suggestions" id="suggestions"></ul></div>
@@ -155,7 +163,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 </div>
 <div class="toast" id="toast"></div>
 <script>
-/* ======== 员工与班次定义 ======== */
 const EMPS=[
 {name:'罗凯',shift:'morning'},
 {name:'陈力',shift:'middle'},
@@ -172,6 +179,8 @@ night:{label:'晚',full:'晚班',time:'21:00-次日05:00',emoji:'🌙',hours:8}
 };
 const WD=['周一','周二','周三','周四','周五','周六','周日'];
 let overrides={},allWeeks=[],leaves={},adjustments=[],editIdx=null,tempShift=null;
+/* 衔接状态 */
+let linkState=null;
 const $=id=>document.getElementById(id);
 const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const parse=s=>{const p=s.split('-').map(Number);return new Date(p[0],p[1]-1,p[2])};
@@ -179,14 +188,105 @@ const addD=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r};
 const getShift=i=>overrides[i]||EMPS[i].shift;
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 
-/* ======== 初始化 ======== */
+/* ====== 初始化 ====== */
 (function(){
 const t=new Date(),dow=t.getDay(),diff=dow===0?-6:1-dow;
 const mon=new Date(t);mon.setDate(t.getDate()+diff);
 $('weekStart').value=fmt(mon);
 renderEmpCard();renderSpecialPanel();onSpanChange();
+loadLinkState();
 })();
 
+/* ====== 衔接系统 ====== */
+function loadLinkState(){
+const raw=localStorage.getItem('shift_link');
+if(!raw){$('linkArea').innerHTML='';return}
+try{linkState=JSON.parse(raw)}catch(e){linkState=null;return}
+renderLinkCard();
+}
+
+function renderLinkCard(){
+if(!linkState){$('linkArea').innerHTML='';return}
+const nextType=linkState.lastType==='big'?'small':'big';
+const nextLabel=nextType==='big'?'大休（双休）':'小休（单休）';
+let h='<div class="link-card"><h3>📎 检测到上期排班记录</h3>';
+h+='<div class="info">📅 上期：'+linkState.startDate+' ~ '+linkState.endDate+'（共'+linkState.numWeeks+'周）</div>';
+h+='<div class="info">🔄 上期末周类型：'+(linkState.lastType==='big'?'大休':'小休')+' → 本期首周建议：<strong>'+nextLabel+'</strong></div>';
+h+='<div class="info">🔄 轮换位置：中班第'+linkState.rotIdx+'轮 · 晚班第'+linkState.rotIdx+'轮</div>';
+/* 欠休 */
+let hasDebt=false;
+h+='<div class="info">💰 欠休继承：';
+EMPS.forEach((e,i)=>{
+const d=linkState.debt[i]||0;
+if(d>0){h+='<span class="debt-tag">'+e.name+' +'+d+'天</span>';hasDebt=true}
+});
+if(!hasDebt)h+='<span style="color:#4caf50">无欠休 ✅</span>';
+h+='</div>';
+h+='<div class="actions"><button class="btn-apply" onclick="applyLink()">✅ 应用衔接</button>';
+h+='<button class="btn-ignore" onclick="ignoreLink()">🔄 忽略，重新开始</button></div></div>';
+$('linkArea').innerHTML=h;
+}
+
+function applyLink(){
+if(!linkState)return;
+/* 设置每周类型：从上期末周的反面开始交替 */
+const n=+$('spanWeeks').value;
+const startType=linkState.lastType==='big'?'small':'big';
+for(let w=0;w<n;w++){
+const el=$('wt_'+w);
+if(el){
+if(w%2===0)el.value=startType;
+else el.value=startType==='big'?'small':'big';
+}
+}
+/* 设置起始日期为上期结束后的下一个周一 */
+const nextMon=addD(parse(linkState.endDate),1);
+$('weekStart').value=fmt(nextMon);
+toast('✅ 已应用上期衔接，大小休已自动交替');
+}
+
+function ignoreLink(){
+linkState=null;
+localStorage.removeItem('shift_link');
+$('linkArea').innerHTML='';
+toast('已忽略上期记录');
+}
+
+function saveAndLink(){
+if(!allWeeks.length)return;
+/* 计算每人在这一轮排班后的欠休余额 */
+const debt={};
+EMPS.forEach((e,i)=>{
+const shouldRest=allWeeks.reduce((s,w)=>s+(w.type==='big'?2:w.type==='small'?1:2),0);
+let actualRest=0;
+allWeeks.forEach(wk=>{for(let d=0;d<7;d++)if(!wk.sched[i][d])actualRest++});
+/* 继承上期欠休 */
+const inherited=(linkState&&linkState.debt[i])||0;
+debt[i]=Math.max(0,shouldRest-actualRest+inherited);
+});
+const lastWk=allWeeks[allWeeks.length-1];
+const endDate=fmt(addD(lastWk.monday,6));
+const state={
+startDate:fmt(allWeeks[0].monday),
+endDate:endDate,
+numWeeks:allWeeks.length,
+lastType:lastWk.type,
+rotIdx:(linkState?linkState.rotIdx:0)+allWeeks.length,
+debt:debt,
+savedAt:new Date().toLocaleString('zh-CN')
+};
+localStorage.setItem('shift_link',JSON.stringify(state));
+/* 也存历史 */
+const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
+h.unshift({start:fmt(allWeeks[0].monday),weeks:allWeeks.map(w=>({monday:fmt(w.monday),type:w.type,biz:w.biz,sched:w.sched})),adjustments,savedAt:state.savedAt});
+if(h.length>20)h.pop();
+localStorage.setItem('shift_hist',JSON.stringify(h));
+linkState=state;
+renderLinkCard();
+toast('💾 已保存！下次排班将自动衔接本期');
+}
+
+/* ====== 员工卡片 ====== */
 function renderEmpCard(){
 const g={morning:[],middle:[],night:[]};
 EMPS.forEach((e,i)=>g[getShift(i)].push(i));
@@ -194,26 +294,28 @@ let h='<h2>👥 当前排班人员 <span style="font-size:12px;color:#999;font-w
 for(const[s,idxs] of Object.entries(g)){
 if(!idxs.length)continue;
 const si=SI[s];
-const cnt=s==='morning'?'工作日1人':s==='middle'?'工作日2人':'工作日2人(4人轮换)';
 h+='<div class="shift-group"><div class="shift-group-title '+s+'">'+si.emoji+' '+si.full+' '+si.time+'</div>';
 h+='<div class="emp-tags">';
 for(const i of idxs){
 h+='<span class="emp-tag">'+EMPS[i].name+(overrides[i]?'<span class="override-badge">临</span>':'');
 h+='<button class="gear-btn" onclick="openModal('+i+')">⚙</button></span>';
 }
-h+='</div><div style="font-size:12px;color:#999;margin:4px 0 0 12px">'+cnt+'</div></div>';
+h+='</div></div>';
 }
 $('empCard').innerHTML=h;
 }
 
-/* ======== 多周配置 ======== */
+/* ====== 多周配置 ====== */
 function onSpanChange(){
 const n=+$('spanWeeks').value;
+/* 确定首周类型：有衔接状态就交替，没有就默认大小交替 */
+let startType='big';
+if(linkState)startType=linkState.lastType==='big'?'small':'big';
 let h='';
 for(let w=0;w<n;w++){
-/* 默认4周模式：大小大小交替 */
-const def=w%2===0?'big':'small';
-h+='<div class="week-config-card"><h4>第'+(w+1)+'周</h4>';
+const def=w%2===0?startType:(startType==='big'?'small':'big');
+const mon=addD(parse($('weekStart').value||fmt(new Date())),w*7);
+h+='<div class="week-config-card"><h4>第'+(w+1)+'周 '+(mon.getMonth()+1)+'/'+mon.getDate()+'起</h4>';
 h+='<select id="wt_'+w+'">';
 h+='<option value="big"'+(def==='big'?' selected':'')+'>大休（双休2天）</option>';
 h+='<option value="small"'+(def==='small'?' selected':'')+'>小休（单休1天）</option>';
@@ -225,7 +327,7 @@ h+='</div>';
 $('weekConfigs').innerHTML=h;
 }
 
-/* ======== 临时调班弹窗 ======== */
+/* ====== 临时调班弹窗 ====== */
 function openModal(i){
 editIdx=i;tempShift=getShift(i);
 $('modalTitle').textContent='调整 '+EMPS[i].name+' 的班次';
@@ -233,8 +335,8 @@ $('modalReset').style.display=overrides[i]?'block':'none';
 let h='';
 for(const[k,si] of Object.entries(SI)){
 const act=k===tempShift?'active':'';
-const def=k===EMPS[i].shift?' <span style="font-size:11px;color:#999;margin-left:auto">（默认）</span>':'';
-h+='<div class="shift-option '+act+'" onclick="pickShift(this,\''+k+'\')"><span class="dot '+k+'"></span><span>'+si.emoji+' '+si.full+' '+si.time+'</span>'+def+'</div>';
+const def=k===EMPS[i].shift?' (默认)':'';
+h+='<div class="shift-option '+act+'" onclick="pickShift(this,\''+k+'\')"><span class="dot '+k+'"></span><span>'+si.emoji+' '+si.full+' '+si.time+def+'</span></div>';
 }
 $('modalOptions').innerHTML=h;
 $('shiftModal').classList.add('open');
@@ -249,7 +351,6 @@ toast(EMPS[editIdx].name+' → '+SI[getShift(editIdx)].full);
 }
 function resetOverride(){if(editIdx===null)return;delete overrides[editIdx];closeModal();renderEmpCard();if(allWeeks.length)doGenerate();toast(EMPS[editIdx].name+' 恢复默认')}
 function closeModal(){$('shiftModal').classList.remove('open');editIdx=null}
-
 function toggleSpecial(){$('specialPanel').classList.toggle('open')}
 function renderSpecialPanel(){
 let h='<p style="font-size:13px;color:#666;margin-bottom:10px">勾选有特殊情况的员工：</p>';
@@ -272,20 +373,7 @@ if(ds.length)leaves[i]={type:$('lt'+i).value,days:ds};
 });
 }
 
-/* ================================================================
-   核心排班算法 v11
-   
-   铁律：
-   1. 员工固定班次不变（除非手动临时覆盖）
-   2. 每4周 = 2次大休(各2天) + 2次小休(各1天) = 共6天休息
-   3. 工作日满员：早1 中2 晚2（晚班4人里选2人）
-   4. 大休周末减半：早0~1 中1 晚1
-   5. 小休拆半：同班次一半周六休一半周日休
-   6. 大休连休灵活：不限周六日，可以是任意相邻2天
-   7. 繁忙周：全员上，欠休记录到后续周补偿
-   8. 手动调整自动追踪，在后续周补偿
-   ================================================================ */
-
+/* ====== 核心排班算法 v12 ====== */
 function doGenerate(){
 const ds=$('weekStart').value;
 if(!ds){toast('请先选择日期');return}
@@ -294,54 +382,39 @@ const dow=d.getDay(),diff=dow===0?-6:1-dow;
 const startMon=addD(d,diff);
 $('weekStart').value=fmt(startMon);
 syncLeaves();
-
 const numWeeks=+$('spanWeeks').value;
-allWeeks=[];
-adjustments=[];
-
-/* 欠休追踪：每人累计欠多少天 */
+allWeeks=[];adjustments=[];
+/* 继承上期欠休 */
 let debt={};
-EMPS.forEach((e,i)=>debt[i]=0);
-
-/* 轮换计数器：保证公平 */
-let rotIdx=startMon.getDate()%7;
+EMPS.forEach((e,i)=>debt[i]=(linkState?linkState.debt[i]:0)||0);
+/* 轮换起点 */
+let rot=(linkState?linkState.rotIdx:0)||0;
 
 for(let w=0;w<numWeeks;w++){
 const wMon=addD(startMon,w*7);
 const wType=$('wt_'+w)?$('wt_'+w).value:(w%2===0?'big':'small');
 const bizLv=$('bz_'+w)?$('bz_'+w).value:'normal';
-
-/* 初始化：所有人所有天 = 上班 */
 const sched=EMPS.map(()=>[true,true,true,true,true,true,true]);
-
-/* 请假的人直接标记为不在岗 */
+/* 请假标记 */
 for(const[idx,info] of Object.entries(leaves)){
 for(const dd of info.days)sched[+idx][dd]=false;
 }
-
 if(wType==='busy'){
-/* 繁忙周：全员上班，记录欠休(按大休2天标准) */
+/* 繁忙全员上，累计欠休2天（大休标准） */
 EMPS.forEach((e,i)=>{debt[i]+=2});
 }else{
-/* 分组 */
 const groups={morning:[],middle:[],night:[]};
 EMPS.forEach((e,i)=>groups[getShift(i)].push(i));
-
-/* 每人本周应休 = 基础(大2/小1) + 补偿(最多1天) */
+/* 每人本周应休 = 基础 + min(欠休,1) */
 const target={};
 EMPS.forEach((e,i)=>{
 const base=wType==='big'?2:1;
 const bonus=Math.min(debt[i],1);
 target[i]=base+bonus;
 });
-
-/* 排早班 */
 schedMorning(groups.morning,target,sched,wType,bizLv);
-/* 排中班 */
-schedMiddle(groups.middle,target,sched,wType,bizLv,rotIdx);
-/* 排晚班 */
-schedNight(groups.night,target,sched,wType,bizLv,rotIdx);
-
+schedMiddle(groups.middle,target,sched,wType,bizLv,rot+w);
+schedNight(groups.night,target,sched,wType,bizLv,rot+w);
 /* 扣减已补偿的欠休 */
 EMPS.forEach((e,i)=>{
 const base=wType==='big'?2:1;
@@ -350,160 +423,126 @@ const compensated=actual-base;
 if(compensated>0)debt[i]=Math.max(0,debt[i]-compensated);
 });
 }
-
 allWeeks.push({monday:wMon,type:wType,biz:bizLv,sched});
-rotIdx++;
 }
-
 renderAllWeeks();
 $('result').style.display='block';
-toast('✅ '+numWeeks+'周排班已生成，点击标签可微调');
+toast('✅ '+numWeeks+'周排班已生成');
 }
 
-/* ---- 早班排班（1人：罗凯）---- */
+/* ---- 早班（1人）---- */
 function schedMorning(idxs,target,sched,wType,bizLv){
 if(!idxs.length)return;
 const i=idxs[0];
-const t=target[i]-cntRest(sched,i);
-if(t<=0)return;
+const t=target[i];
 if(t>=2){
-/* 大休2天连休。如果周末宽松早班不需要人，优先休周六日 */
-if(bizLv==='light'){
-setOff(sched,i,5);setOff(sched,i,6);
-}else{
-/* 周末需要人，把连休挪到工作日（周四五） */
-setOff(sched,i,3);setOff(sched,i,4);
-}
-}else{
-/* 小休1天：周日休 */
-setOff(sched,i,6);
+/* 双休：宽松→周六日，正常→周四五（周末在岗）*/
+if(bizLv==='light'){off(sched,i,5);off(sched,i,6)}
+else{off(sched,i,3);off(sched,i,4)}
+if(t>=3)off(sched,i,bizLv==='light'?4:2); /* 补休 */
+}else if(t>=1){
+off(sched,i,6); /* 单休周日 */
 }
 }
 
-/* ---- 中班排班（2人：陈力、柳鹏）---- */
+/* ---- 中班（2人）---- */
 function schedMiddle(idxs,target,sched,wType,bizLv,rot){
 if(idxs.length<2)return;
-const a=idxs[rot%2===0?0:1]; /* 本周A值班周末 */
-const b=idxs[rot%2===0?1:0]; /* 本周B休周末 */
-
+/* 交替：a值班周末，b休周末 */
+const a=idxs[rot%2],b=idxs[(rot+1)%2];
 if(wType==='big'){
-const tA=target[a]-cntRest(sched,a);
-const tB=target[b]-cntRest(sched,b);
-/* B休周六日双休（或含补休天），A值班周末 */
-if(tB>=2){setOff(sched,b,5);setOff(sched,b,6)}
-if(tB>=3){setOff(sched,b,4)} /* 补休：周五也休 */
-/* A的休息放工作日连休，保证每天中班至少1人 */
-if(tA>=2){setOff(sched,a,1);setOff(sched,a,2)} /* 周二三连休 */
-if(tA>=3){setOff(sched,a,0)} /* 补休：周一 */
+const tB=target[b],tA=target[a];
+/* b休周六日（或含补休），a休工作日连休 */
+if(tB>=2){off(sched,b,5);off(sched,b,6)}
+if(tB>=3)off(sched,b,4);
+if(tA>=2){off(sched,a,1);off(sched,a,2)}
+if(tA>=3)off(sched,a,0);
 }else{
-/* 小休：拆半。A周六休B周日休 */
-const tA=target[a]-cntRest(sched,a);
-const tB=target[b]-cntRest(sched,b);
-if(tA>=1)setOff(sched,a,5);
-if(tB>=1)setOff(sched,b,6);
-/* 如果有补休额度，放工作日 */
-if(tA>=2)setOff(sched,a,1);
-if(tB>=2)setOff(sched,b,2);
+/* 小休拆半：a周六休 b周日休 */
+const tA=target[a],tB=target[b];
+if(tA>=1)off(sched,a,5);
+if(tB>=1)off(sched,b,6);
+if(tA>=2)off(sched,a,1); /* 补休工作日 */
+if(tB>=2)off(sched,b,2);
 }
 }
 
-/* ---- 晚班排班（4人，工作日每天2人，周末1人）---- */
+/* ---- 晚班（4人，工作日每天2人）---- */
 function schedNight(idxs,target,sched,wType,bizLv,rot){
 if(idxs.length<2)return;
 const n=idxs.length;
-
 if(wType==='big'){
-/* 大休：每人休2天（+补休），要保证工作日每天>=2人，周末>=1人
-   策略：4人的连休区间错开，使每天在岗>=2（工作日）或>=1（周末）
-   且周六在岗数≈周日在岗数 */
+/* 大休：4人各休2天连休，错开分布 */
 const plans=[
-/* 每个子数组是该人的休息天 [dayA, dayB] */
-[[0,1],[2,3],[4,5],[5,6]], /* 人0休周一二,人1休周三四,人2休周五六,人3休周六日 */
-[[0,1],[2,3],[5,6],[4,5]], 
+[[0,1],[2,3],[4,5],[5,6]],
+[[0,1],[2,3],[5,6],[4,5]],
 [[5,6],[0,1],[2,3],[3,4]],
 [[4,5],[5,6],[0,1],[2,3]],
 [[1,2],[3,4],[5,6],[0,6]],
-[[2,3],[4,5],[0,1],[5,6]],
+[[2,3],[4,5],[0,1],[5,6]]
 ];
-/* 选一个有效方案 */
 let best=null;
 for(let pi=0;pi<plans.length;pi++){
 const p=plans[(pi+rot)%plans.length];
-if(validateNightPlan(n,idxs,sched,p,target))
+if(validatePlan(idxs,sched,p,target))
 {best=p;break}
 }
 if(!best)best=plans[rot%plans.length];
-/* 应用 */
 for(let j=0;j<n&&j<best.length;j++){
-const i=idxs[j];
-const t=target[i]-cntRest(sched,i);
-if(t>=2){setOff(sched,i,best[j][0]);setOff(sched,i,best[j][1])}
-else if(t>=1){setOff(sched,i,best[j][0])}
-/* 补休 */
+const i=idxs[j],t=target[i];
+if(t>=2){off(sched,i,best[j][0]);off(sched,i,best[j][1])}
+else if(t>=1)off(sched,i,best[j][0]);
 if(t>=3){
 for(let d=0;d<7;d++){
-if(sched[i][d]&&!best[j].includes(d)&&canTakeOff(n,idxs,sched,i,d,2,1))
-{setOff(sched,i,d);break}
+if(sched[i][d]&&!best[j].includes(d)&&canOff(idxs,sched,i,d,2,1)){off(sched,i,d);break}
 }
 }
 }
 }else{
-/* 小休：每人休1天，拆半均衡。前半周六休，后半周日休 */
+/* 小休：拆半均衡，前半周六后半周日 */
 const half=Math.ceil(n/2);
-const order=rotateArr(idxs,rot);
+const order=rotArr(idxs,rot);
 for(let j=0;j<order.length;j++){
-const i=order[j];
-const t=target[i]-cntRest(sched,i);
+const i=order[j],t=target[i];
 if(t<=0)continue;
-if(j<half)setOff(sched,i,5); /* 周六休 */
-else setOff(sched,i,6); /* 周日休 */
-/* 补休放工作日 */
+if(j<half)off(sched,i,5);else off(sched,i,6);
 if(t>=2){
 for(let d=0;d<5;d++){
-if(sched[i][d]&&canTakeOff(n,idxs,sched,i,d,2,1))
-{setOff(sched,i,d);break}
+if(sched[i][d]&&canOff(idxs,sched,i,d,2,1)){off(sched,i,d);break}
 }
 }
 }
 }
 }
 
-/* 验证晚班方案是否满足每天人数 */
-function validateNightPlan(n,idxs,sched,plan,target){
-const off=Array(7).fill(0);
+function validatePlan(idxs,sched,plan,target){
+const n=idxs.length;const offCnt=Array(7).fill(0);
 for(let j=0;j<n&&j<plan.length;j++){
-const i=idxs[j];
-const t=target[i]-cntRest(sched,i);
-if(t>=2){off[plan[j][0]]++;off[plan[j][1]]++}
-else if(t>=1){off[plan[j][0]]++}
+const i=idxs[j],t=target[i];
+if(t>=2){offCnt[plan[j][0]]++;offCnt[plan[j][1]]++}
+else if(t>=1)offCnt[plan[j][0]]++;
 }
 for(let d=0;d<7;d++){
-/* 还要算请假的人 */
-let unavail=off[d];
+let unavail=offCnt[d];
 for(const i of idxs)if(!sched[i][d])unavail++;
-const onDuty=n-unavail;
-if(d<5&&onDuty<2)return false;
-if(d>=5&&onDuty<1)return false;
+const on=n-unavail;
+if(d<5&&on<2)return false;
+if(d>=5&&on<1)return false;
 }
-/* 周六日均衡 */
-let satOff=off[5],sunOff=off[6];
-for(const i of idxs){if(!sched[i][5])satOff++;if(!sched[i][6])sunOff++}
-const satOn=n-satOff,sunOn=n-sunOff;
-if(Math.abs(satOn-sunOn)>1)return false;
+let s5=0,s6=0;
+for(const i of idxs){if(!sched[i][5])s5++;if(!sched[i][6])s6++}
+s5+=offCnt[5];s6+=offCnt[6];
+if(Math.abs((n-s5)-(n-s6))>1)return false;
 return true;
 }
 
-/* 检查某人某天能否休息（不导致当天缺员）*/
-function canTakeOff(n,idxs,sched,empIdx,day,wdNeed,weNeed){
-let cnt=0;
-for(const i of idxs){if(i!==empIdx&&sched[i][day])cnt++}
-const need=day<5?wdNeed:weNeed;
-return cnt>=need;
+function canOff(idxs,sched,ei,d,wdN,weN){
+let c=0;for(const i of idxs)if(i!==ei&&sched[i][d])c++;
+return c>=(d<5?wdN:weN);
 }
-
-function rotateArr(arr,n){const a=[...arr];const r=n%a.length;return[...a.slice(r),...a.slice(0,r)]}
+function rotArr(a,n){const r=n%a.length;return[...a.slice(r),...a.slice(0,r)]}
 function cntRest(sched,i){let c=0;for(let d=0;d<7;d++)if(!sched[i][d])c++;return c}
-function setOff(sched,i,d){sched[i][d]=false}
+function off(sched,i,d){sched[i][d]=false}
 
 /* ====== 渲染 ====== */
 function renderAllWeeks(){
@@ -525,18 +564,15 @@ const dates=[];for(let i=0;i<7;i++)dates.push(addD(wk.monday,i));
 let h='<thead><tr><th style="min-width:80px">姓名</th>';
 dates.forEach((d,i)=>{h+='<th class="'+(i>=5?'weekend':'')+'">'+WD[i]+'<br><span class="date">'+(d.getMonth()+1)+'/'+d.getDate()+'</span></th>'});
 h+='<th style="min-width:90px">本周状态</th></tr></thead><tbody>';
-
 const gm={morning:[],middle:[],night:[]};
 EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
-
 for(const s of['morning','middle','night']){
 const idxs=gm[s];if(!idxs.length)continue;
 const si=SI[s];
 h+='<tr class="group-sep"><td colspan="9">'+si.emoji+' '+si.full+' '+si.time+'</td></tr>';
 for(const i of idxs){
 const a=analyzeOne(wk.sched,i);
-h+='<tr>';
-h+='<td class="name-cell">'+EMPS[i].name+'</td>';
+h+='<tr><td class="name-cell">'+EMPS[i].name+'</td>';
 for(let d=0;d<7;d++){
 if(wk.sched[i][d])h+='<td><span class="badge '+s+'" onclick="toggleCell('+wi+','+i+','+d+')">'+si.label+'</span></td>';
 else h+='<td><span class="badge rest" onclick="toggleCell('+wi+','+i+','+d+')">休</span></td>';
@@ -544,16 +580,13 @@ else h+='<td><span class="badge rest" onclick="toggleCell('+wi+','+i+','+d+')">�
 h+='<td>'+statusTag(a)+'</td></tr>';
 }
 }
-
 /* 统计行 */
 h+='<tr class="stat-row stat-total"><td style="text-align:right;font-weight:600">在岗总人数</td>';
 for(let d=0;d<7;d++){let c=0;EMPS.forEach((e,i)=>{if(wk.sched[i][d])c++});h+='<td>'+c+'人</td>'}
 h+='<td></td></tr>';
-
 for(const s of['morning','middle','night']){
 const idxs=gm[s];if(!idxs.length)continue;
-const si=SI[s];
-const wdN=s==='morning'?1:2;
+const si=SI[s];const wdN=s==='morning'?1:2;
 const weN=s==='morning'?(wk.biz==='light'?0:1):1;
 h+='<tr class="stat-row"><td style="text-align:right;font-size:11px">'+si.label+'班</td>';
 for(let d=0;d<7;d++){
@@ -563,30 +596,19 @@ h+='<td class="'+(c<need?'short':'')+'">'+c+'/'+need+'人</td>';
 }
 h+='<td></td></tr>';
 }
-h+='</tbody>';
-return h;
+return h+'</tbody>';
 }
 
-/* 点击切换 */
 function toggleCell(wi,ei,d){
 const before=allWeeks[wi].sched[ei][d];
 allWeeks[wi].sched[ei][d]=!before;
-/* 记录调整 */
-const wk=allWeeks[wi];
-const dt=addD(wk.monday,d);
-adjustments.push({
-emp:EMPS[ei].name,
-week:wi+1,
-day:WD[d],
-date:(dt.getMonth()+1)+'/'+dt.getDate(),
-from:before?'上班':'休息',
-to:before?'休息':'上班'
-});
+const wk=allWeeks[wi];const dt=addD(wk.monday,d);
+adjustments.push({emp:EMPS[ei].name,week:wi+1,day:WD[d],date:(dt.getMonth()+1)+'/'+dt.getDate(),from:before?'上班':'休息',to:before?'休息':'上班'});
 renderAllWeeks();
 toast(EMPS[ei].name+' '+WD[d]+' → '+(allWeeks[wi].sched[ei][d]?'上班':'休息'));
 }
 
-/* ====== 分析函数 ====== */
+/* ====== 分析 ====== */
 function analyzeOne(sched,i){
 const rest=[],work=[];
 for(let d=0;d<7;d++){if(sched[i][d])work.push(d);else rest.push(d)}
@@ -612,28 +634,31 @@ let maxCon=0,cur=0;
 for(let d=0;d<7;d++){if(sched[i][d]){cur++;maxCon=Math.max(maxCon,cur)}else cur=0}
 return{rest,work,type,label,desc,maxCon,totalWork:work.length,totalRest:rest.length};
 }
-function statusTag(a){return'<span class="rest-tag '+a.type+'">'+a.label+'</span>'}
+function statusTag(a){return'<span class="rest-tag '+a.type+'">'+a.label+'<div style="font-size:10px;color:#999">'+a.desc+'</div></span>'}
 
-/* ====== 4周总览 ====== */
+/* ====== 总览 ====== */
 function renderSummary(){
 let h='<table class="summary-table"><thead><tr><th>姓名</th><th>班次</th>';
 allWeeks.forEach((w,i)=>h+='<th>第'+(i+1)+'周</th>');
-h+='<th>总上班</th><th>总休息</th><th>应休</th><th>差额</th><th>状态</th></tr></thead><tbody>';
+h+='<th>总上班</th><th>总休息</th><th>应休</th><th>继承欠休</th><th>差额</th><th>状态</th></tr></thead><tbody>';
 EMPS.forEach((e,i)=>{
 const si=SI[getShift(i)];
 let tw=0,tr=0,shouldRest=0;
+const inherited=(linkState?linkState.debt[i]:0)||0;
 h+='<tr><td style="font-weight:600">'+e.name+'</td><td>'+si.emoji+si.label+'</td>';
 allWeeks.forEach(wk=>{
 const a=analyzeOne(wk.sched,i);
 tw+=a.totalWork;tr+=a.totalRest;
 shouldRest+=wk.type==='big'?2:wk.type==='small'?1:2;
-h+='<td>'+statusTag(a)+'<div style="font-size:11px;color:#999">'+a.desc+'</div></td>';
+h+='<td>'+statusTag(a)+'</td>';
 });
-const diff=tr-shouldRest;
+const totalShould=shouldRest+inherited;
+const diff=tr-totalShould;
 const cls=diff<0?'warn-cell':diff===0?'good-cell':'';
 const sta=diff===0?'✅达标':diff>0?'ℹ️多休'+diff+'天':'⚠️欠休'+(-diff)+'天';
 h+='<td>'+tw+'天</td><td>'+tr+'天</td><td>'+shouldRest+'天</td>';
-h+='<td class="'+cls+'">'+(diff>0?'+':'')+diff+'天</td><td>'+sta+'</td></tr>';
+h+='<td>'+(inherited>0?inherited+'天':'0')+'</td>';
+h+='<td class="'+cls+'">'+diff+'天</td><td>'+sta+'</td></tr>';
 });
 h+='</tbody></table>';
 $('summaryArea').innerHTML=h;
@@ -642,101 +667,89 @@ $('summaryArea').innerHTML=h;
 /* ====== 调整追踪 ====== */
 function renderAdjustLog(){
 if(!adjustments.length){
-$('adjustLog').innerHTML='<div style="color:#999;font-size:13px;text-align:center;padding:12px">暂无手动调整。点击排班表中的标签可以修改。</div>';
-return;
+$('adjustLog').innerHTML='<div style="color:#999;font-size:13px;text-align:center;padding:12px">暂无手动调整。点击标签可修改。</div>';return;
 }
-let h='<div class="adjust-log"><h4>📋 手动调整记录（共'+adjustments.length+'次）</h4>';
-/* 统计每人欠休/多休 */
+let h='<div class="adjust-log"><h4>📋 手动调整记录（'+adjustments.length+'次）</h4>';
 const balance={};
 EMPS.forEach((e,i)=>balance[i]=0);
 adjustments.forEach(a=>{
 const idx=EMPS.findIndex(e=>e.name===a.emp);
 if(idx>=0){
-if(a.from==='休息'&&a.to==='上班')balance[idx]--; /* 少休了1天 */
-if(a.from==='上班'&&a.to==='休息')balance[idx]++; /* 多休了1天 */
+if(a.from==='休息'&&a.to==='上班')balance[idx]--;
+if(a.from==='上班'&&a.to==='休息')balance[idx]++;
 }
 });
 adjustments.forEach(a=>{
-const icon=a.to==='上班'?'⚠️ ':'✅ ';
-h+='<div class="log-item">'+icon+'<strong>'+a.emp+'</strong> 第'+a.week+'周'+a.day+'('+a.date+') '+a.from+'→'+a.to+'</div>';
+h+='<div class="log-item">'+(a.to==='上班'?'⚠️':'✅')+' <strong>'+a.emp+'</strong> 第'+a.week+'周'+a.day+'('+a.date+') '+a.from+'→'+a.to+'</div>';
 });
-h+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e8d890">';
-h+='<strong>累计影响：</strong>';
+h+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e8d890"><strong>累计影响：</strong>';
+let hasImpact=false;
 EMPS.forEach((e,i)=>{
 if(balance[i]!==0){
-const txt=balance[i]>0?'多休'+balance[i]+'天':'欠休'+(-balance[i])+'天';
+hasImpact=true;
 const c=balance[i]<0?'#cf1322':'#389e0d';
-h+='<span style="margin-right:12px;color:'+c+'">'+e.name+' '+txt+'</span>';
+const t=balance[i]>0?'多休'+balance[i]+'天':'欠休'+(-balance[i])+'天';
+h+='<span style="margin-right:12px;color:'+c+'">'+e.name+' '+t+'</span>';
 }
 });
+if(!hasImpact)h+='<span style="color:#999">无净影响</span>';
 h+='</div></div>';
 $('adjustLog').innerHTML=h;
 }
 
-/* ====== 个人分析卡片 ====== */
 function renderAnalysis(){
 let h='';
 EMPS.forEach((e,i)=>{
 const si=SI[getShift(i)];
 let tw=0,tr=0;
 const weekLines=allWeeks.map((wk,wi)=>{
-const a=analyzeOne(wk.sched,i);
-tw+=a.totalWork;tr+=a.totalRest;
-return '<div style="font-size:11px;margin:2px 0">W'+(wi+1)+': '+a.label+' '+a.desc+'</div>';
+const a=analyzeOne(wk.sched,i);tw+=a.totalWork;tr+=a.totalRest;
+return'<div style="font-size:11px;margin:2px 0">W'+(wi+1)+': '+a.label+' '+a.desc+'</div>';
 }).join('');
 h+='<div class="pcard"><div class="pname">'+e.name+'</div>';
 h+='<div class="pshift">'+si.emoji+' '+si.full+'</div>';
-h+='<div class="pstats"><div>📅 总上班 <strong>'+tw+'</strong>天 · 总休息 <strong>'+tr+'</strong>天</div></div>';
-h+=weekLines+'</div>';
+h+='<div class="pstats"><div>📅 上班<strong>'+tw+'</strong>天 休息<strong>'+tr+'</strong>天</div></div>'+weekLines+'</div>';
 });
 $('analysisGrid').innerHTML=h;
 }
 
-/* ====== 智能建议 ====== */
 function renderSuggestions(){
 const ss=[];
 EMPS.forEach((e,i)=>{
 let totalRest=0;
 allWeeks.forEach((wk,wi)=>{
-const a=analyzeOne(wk.sched,i);
-totalRest+=a.totalRest;
-if(a.type==='none')ss.push({lv:'error',t:e.name+' 第'+(wi+1)+'周无休息！建议在后续周补休'});
-if(a.type==='split')ss.push({lv:'warn',t:e.name+' 第'+(wi+1)+'周休息被拆开（'+a.desc+'），建议调成连休'});
-if(a.maxCon>=6)ss.push({lv:'error',t:e.name+' 第'+(wi+1)+'周连续工作'+a.maxCon+'天，注意健康'});
+const a=analyzeOne(wk.sched,i);totalRest+=a.totalRest;
+if(a.type==='none')ss.push({lv:'error',t:e.name+' 第'+(wi+1)+'周无休息！'});
+if(a.type==='split')ss.push({lv:'warn',t:e.name+' 第'+(wi+1)+'周休息拆开（'+a.desc+'），建议调成连休'});
+if(a.maxCon>=6)ss.push({lv:'error',t:e.name+' 第'+(wi+1)+'周连续工作'+a.maxCon+'天'});
 });
 const shouldRest=allWeeks.reduce((s,w)=>s+(w.type==='big'?2:w.type==='small'?1:2),0);
-const diff=totalRest-shouldRest;
-if(diff<=-2)ss.push({lv:'error',t:e.name+' 整个周期少休了'+(-diff)+'天，急需补休！'});
-else if(diff===-1)ss.push({lv:'warn',t:e.name+' 少休了1天，建议在后续安排补休'});
+const inherited=(linkState?linkState.debt[i]:0)||0;
+const diff=totalRest-(shouldRest+inherited);
+if(diff<=-2)ss.push({lv:'error',t:e.name+' 周期内少休'+(-diff)+'天，急需补休！'});
+else if(diff===-1)ss.push({lv:'warn',t:e.name+' 少休1天，建议后续补休'});
+if(inherited>0)ss.push({lv:'warn',t:e.name+' 从上期继承'+inherited+'天欠休，本期需补偿'});
 });
-
-/* 班次覆盖检查 */
+/* 缺员检查 */
 const gm={morning:[],middle:[],night:[]};
 EMPS.forEach((e,i)=>gm[getShift(i)].push(i));
 allWeeks.forEach((wk,wi)=>{
 for(const s of['morning','middle','night']){
 const idxs=gm[s];if(!idxs.length)continue;
-const wdN=s==='morning'?1:2;
-const weN=s==='morning'?(wk.biz==='light'?0:1):1;
+const wdN=s==='morning'?1:2;const weN=s==='morning'?(wk.biz==='light'?0:1):1;
 for(let d=0;d<7;d++){
 let c=0;for(const ii of idxs)if(wk.sched[ii][d])c++;
 const need=d<5?wdN:(wk.type==='busy'?wdN:weN);
-if(c<need)ss.push({lv:'warn',t:'第'+(wi+1)+'周'+WD[d]+' '+SI[s].full+'缺'+(need-c)+'人'});
+if(c<need)ss.push({lv:'warn',t:'第'+(wi+1)+'周'+WD[d]+SI[s].full+'缺'+(need-c)+'人'});
 }
 }
 });
-
-/* 4周周期校验 */
 if(allWeeks.length===4){
 const types=allWeeks.map(w=>w.type);
-const bigCnt=types.filter(t=>t==='big').length;
-const smallCnt=types.filter(t=>t==='small').length;
-if(bigCnt!==2||smallCnt!==2){
-ss.push({lv:'warn',t:'当前4周配置：大休'+bigCnt+'次、小休'+smallCnt+'次、繁忙'+(4-bigCnt-smallCnt)+'次。标准应为2大休+2小休，繁忙周的欠休已自动追踪。'});
+const bc=types.filter(t=>t==='big').length,sc=types.filter(t=>t==='small').length;
+if(bc!==2||sc!==2)ss.push({lv:'warn',t:'当前4周：大休'+bc+'次、小休'+sc+'次、繁忙'+(4-bc-sc)+'次。标准2大+2小，繁忙欠休已追踪。'});
 }
-}
-
-if(!ss.length)ss.push({lv:'ok',t:'✅ 排班良好！班次覆盖充足，休息均衡，符合2大休+2小休标准。'});
+if(!ss.length)ss.push({lv:'ok',t:'✅ 排班良好！休息均衡，班次覆盖充足。'});
 $('suggestions').innerHTML=ss.map(s=>'<li class="'+s.lv+'"><span>'+(s.lv==='error'?'🔴':s.lv==='warn'?'🟡':'🟢')+'</span><span>'+s.t+'</span></li>').join('');
 }
 
@@ -750,27 +763,15 @@ csv+='姓名';
 for(let d=0;d<7;d++){const dt=addD(wk.monday,d);csv+=','+WD[d]+'('+(dt.getMonth()+1)+'/'+dt.getDate()+')';}
 csv+=',状态\n';
 EMPS.forEach((e,i)=>{
-const si=SI[getShift(i)];
 csv+=e.name;
-for(let d=0;d<7;d++)csv+=','+(wk.sched[i][d]?si.label+'班':'休息');
-const a=analyzeOne(wk.sched,i);
-csv+=','+a.label.replace(/[🟢🟡🔵🟠⛔]/g,'').trim()+'\n';
-});
-csv+='\n';
+for(let d=0;d<7;d++)csv+=','+(wk.sched[i][d]?SI[getShift(i)].label+'班':'休息');
+const a=analyzeOne(wk.sched,i);csv+=','+a.desc+'\n';
+});csv+='\n';
 });
 const b=new Blob([csv],{type:'text/csv;charset=utf-8;'});
 const a=document.createElement('a');a.href=URL.createObjectURL(b);
 a.download='排班表_'+fmt(allWeeks[0].monday)+'.csv';a.click();
 toast('📥 已导出CSV');
-}
-
-function saveToHistory(){
-if(!allWeeks.length)return;
-const h=JSON.parse(localStorage.getItem('shift_hist')||'[]');
-const r={start:fmt(allWeeks[0].monday),weeks:allWeeks.map(w=>({monday:fmt(w.monday),type:w.type,biz:w.biz,sched:w.sched})),adjustments:adjustments,savedAt:new Date().toLocaleString('zh-CN')};
-h.unshift(r);if(h.length>20)h.pop();
-localStorage.setItem('shift_hist',JSON.stringify(h));
-toast('💾 已保存到本地');
 }
 </script>
 </body>
