@@ -174,6 +174,179 @@ body {
 .rules-text p { margin-bottom: 4px; }
 .rules-text strong { color: var(--gray-700); }
 
+/* ========== 预警横幅 ========== */
+.warning-banner {
+    background: linear-gradient(135deg, #fef2f2, #fff1f2);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    animation: bannerSlide 0.3s ease;
+}
+@keyframes bannerSlide { from { opacity: 0; transform: translateY(-10px); } }
+.warning-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+.warning-list { display: flex; flex-direction: column; gap: 4px; }
+.warning-item { font-size: 13px; color: #991b1b; line-height: 1.6; }
+
+/* ========== 分析面板 ========== */
+.analysis-panel { overflow: hidden; }
+.analysis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--gray-200);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.analysis-header h2 { margin: 0; padding: 0; border: none; }
+.analysis-tabs { display: flex; gap: 4px; }
+.tab-btn {
+    padding: 5px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    background: white;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    color: var(--gray-600);
+}
+.tab-btn:hover { background: var(--gray-50); }
+.tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* 建议区 */
+.suggestions-title, .ranking-title {
+    font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px;
+}
+.suggestion-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px;
+    background: var(--gray-50); border-radius: 6px; margin-bottom: 6px;
+    font-size: 13px; line-height: 1.6; color: var(--gray-700);
+}
+.sug-icon { flex-shrink: 0; font-size: 16px; }
+
+/* 幸福指数排名 */
+.happiness-ranking { margin-top: 16px; }
+.ranking-list { display: flex; flex-direction: column; gap: 6px; }
+.ranking-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--gray-50); border-radius: 6px; font-size: 13px;
+}
+.rank-medal { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+.rank-name { width: 50px; font-weight: 600; flex-shrink: 0; }
+.rank-bar-wrapper {
+    flex: 1; height: 8px; background: var(--gray-200); border-radius: 4px; overflow: hidden;
+}
+.rank-bar {
+    height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}
+.rank-score { width: 40px; text-align: right; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.issue-count {
+    font-size: 11px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; font-weight: 500;
+}
+.issue-count.ok { background: #ecfdf5; color: #059669; }
+
+/* ========== 每周详情表 ========== */
+.weekly-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.weekly-table th {
+    background: var(--gray-50); padding: 8px; text-align: center;
+    font-weight: 600; font-size: 12px; color: var(--gray-600);
+    border-bottom: 2px solid var(--gray-200);
+}
+.weekly-table td {
+    padding: 8px; text-align: center; border-bottom: 1px solid var(--gray-100);
+    vertical-align: top;
+}
+.weekly-table td.name-cell {
+    text-align: left; font-weight: 500; position: sticky; left: 0; background: white;
+}
+.week-type-label {
+    display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 10px;
+}
+.week-type-label.big { background: #dbeafe; color: #2563eb; }
+.week-type-label.small { background: #fef3c7; color: #d97706; }
+.weekly-rest-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+    white-space: nowrap;
+}
+.weekly-rest-dates {
+    font-size: 10px; color: var(--gray-500); margin-top: 4px; line-height: 1.4;
+}
+
+/* ========== 公平性仪表盘 ========== */
+.fairness-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
+}
+.fairness-card {
+    background: var(--gray-50); border-radius: 8px; padding: 12px;
+}
+.fc-title {
+    font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px;
+}
+.fc-title small { font-weight: 400; color: var(--gray-500); }
+.fc-bars { display: flex; flex-direction: column; gap: 4px; }
+.fc-bar-row { display: flex; align-items: center; gap: 6px; }
+.fc-bar-name { width: 42px; font-size: 11px; color: var(--gray-600); text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-bar-track { flex: 1; height: 10px; background: var(--gray-200); border-radius: 5px; overflow: hidden; }
+.fc-bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s ease; min-width: 2px; }
+.fc-bar-value { width: 50px; font-size: 11px; color: var(--gray-600); flex-shrink: 0; }
+.fairness-summary {
+    margin-top: 12px; padding: 12px; background: var(--gray-50); border-radius: 8px;
+    display: flex; gap: 16px; flex-wrap: wrap;
+}
+.fairness-metric { font-size: 12px; color: var(--gray-600); }
+.fairness-metric strong { color: var(--gray-800); }
+.level-good { color: #059669; }
+.level-ok { color: #d97706; }
+.level-bad { color: #dc2626; }
+
+/* ========== 个人报告 ========== */
+.employee-reports { display: flex; flex-direction: column; gap: 12px; }
+.emp-report {
+    background: var(--gray-50); border-radius: 8px; padding: 14px;
+    border: 1px solid var(--gray-200);
+}
+.emp-report-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.emp-report-name {
+    display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600;
+}
+.emp-report-name .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: white; font-weight: 600;
+}
+.emp-report-score { text-align: right; }
+.score-num { font-size: 28px; font-weight: 800; line-height: 1; }
+.score-label { display: block; font-size: 10px; color: var(--gray-500); margin-top: 2px; }
+.emp-metrics {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px;
+    margin-bottom: 10px;
+}
+.emp-metric {
+    background: white; border-radius: 6px; padding: 6px 8px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.em-label { font-size: 11px; color: var(--gray-500); }
+.em-value { font-size: 12px; font-weight: 600; color: var(--gray-800); }
+.emp-issues { display: flex; flex-direction: column; gap: 4px; }
+.emp-issue {
+    font-size: 12px; padding: 6px 10px; border-radius: 6px; line-height: 1.5;
+}
+.emp-issue.danger { background: #fef2f2; color: #991b1b; }
+.emp-issue.warning { background: #fffbeb; color: #92400e; }
+.emp-issue.ok { background: #ecfdf5; color: #065f46; }
+
+/* ========== 统计 & 排班表（原有） ========== */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 .stat-card { background: var(--gray-50); border-radius: 6px; padding: 10px; text-align: center; }
 .stat-card .stat-name { font-size: 12px; color: var(--gray-500); margin-bottom: 4px; }
@@ -253,6 +426,7 @@ body {
 .cell-badge.night { background: var(--night-bg); color: var(--night); }
 .cell-badge.rest { background: var(--rest-bg); color: var(--rest); }
 
+/* ========== 弹窗 ========== */
 .modal {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     z-index: 1000; display: flex; align-items: center; justify-content: center;
@@ -260,7 +434,7 @@ body {
 .modal-backdrop { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); }
 .modal-content {
     position: relative; background: white; border-radius: 12px;
-    width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-lg);
+    width: 90%; max-width: 560px; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-lg);
 }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--gray-200); }
 .modal-header h3 { font-size: 16px; }
@@ -269,18 +443,58 @@ body {
 .modal-body { padding: 20px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--gray-200); }
 
+.edit-hint {
+    font-size: 12px; color: var(--primary); background: var(--primary-bg);
+    padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;
+}
 .edit-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); }
 .edit-row:last-child { border: none; }
-.edit-row .edit-name { width: 80px; font-weight: 500; font-size: 14px; }
+.edit-row .edit-name { width: 100px; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 4px; }
 .edit-row select { flex: 1; padding: 6px 8px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.edit-status {
+    font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: 600;
+}
+.edit-status.danger { background: #fef2f2; color: #dc2626; }
+.edit-status.warning { background: #fffbeb; color: #d97706; }
 
+/* ========== 影响报告弹窗 ========== */
+.impact-date {
+    font-size: 14px; font-weight: 600; color: var(--gray-700);
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--gray-200);
+}
+.impact-list { display: flex; flex-direction: column; gap: 10px; }
+.impact-person {
+    background: var(--gray-50); border-radius: 8px; padding: 10px 12px;
+}
+.impact-name {
+    font-size: 14px; font-weight: 600; color: var(--gray-800); margin-bottom: 6px;
+}
+.impact-score { font-size: 13px; margin-bottom: 4px; }
+.impact-score.improved { color: #059669; }
+.impact-score.worsened { color: #dc2626; }
+.impact-score.neutral { color: var(--gray-500); }
+.score-delta { font-weight: 700; }
+.impact-rest { font-size: 12px; margin-bottom: 4px; padding: 4px 8px; border-radius: 4px; }
+.impact-rest.gained { background: #ecfdf5; color: #065f46; }
+.impact-rest.lost { background: #fef2f2; color: #991b1b; }
+.impact-issue { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-top: 4px; }
+.impact-issue.new { background: #fffbeb; color: #92400e; }
+.impact-issue.resolved { background: #ecfdf5; color: #065f46; }
+
+/* ========== 响应式 ========== */
 @media (max-width: 900px) {
     .main { flex-direction: column; }
     .sidebar { width: 100%; }
     .calendar-cell { min-height: 70px; padding: 4px; }
     .calendar-shift-row .names { display: none; }
+    .analysis-header { flex-direction: column; align-items: flex-start; }
+    .fairness-cards { grid-template-columns: 1fr; }
+    .emp-metrics { grid-template-columns: repeat(2, 1fr); }
+    .ranking-item { flex-wrap: wrap; }
+    .rank-bar-wrapper { min-width: 60px; }
 }
 
+/* ========== Toast ========== */
 .toast {
     position: fixed; bottom: 24px; right: 24px;
     background: var(--gray-800); color: white; padding: 10px 20px;
