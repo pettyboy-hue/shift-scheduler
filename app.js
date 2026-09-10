@@ -1,13 +1,11 @@
 /**
- * 排班助手前端交互 v3
+ * 排班助手前端交互 v4
  * 
  * 核心改变：
- * - 员工有固定班次，添加时必须选择
- * - 预置公司现有人员一键加载
- * - 特殊情况面板：调休假、请假
- * - 周视图 + 人员视图
- * - 点击单元格切换上班/休息，实时重新分析
- * - 分析面板：总览建议、休息详情、个人报告
+ * - 工作日必须满员，仅双休日减半
+ * - 新增覆盖率面板：每天各班次满员/缺员状态一目了然
+ * - 手动调整后实时显示哪些天缺员了
+ * - 不依赖 analyzer.js，分析逻辑全部内置于 scheduler.js
  */
 
 (function() {
@@ -36,14 +34,13 @@
 
     // === 状态 ===
     var state = {
-        employees: [],      // [{ name, shift }]
+        employees: [],
         scheduler: null,
-        result: null,       // { schedule, dates, dateMeta, analysis }
+        result: null,
         currentView: 'week',
-        specials: {}        // { name: { type, days } }
+        specials: {}
     };
 
-    // === DOM 引用 ===
     var $ = function(id) { return document.getElementById(id); };
 
     // === 初始化 ===
@@ -56,7 +53,6 @@
         monday.setDate(today.getDate() + diff);
         $('input-week-start').value = formatDate(monday);
 
-        // 加载本地存储
         loadState();
         renderEmployeeList();
         renderSpecialList();
@@ -72,7 +68,7 @@
         $('btn-view-week').addEventListener('click', function() { switchView('week'); });
         $('btn-view-person').addEventListener('click', function() { switchView('person'); });
 
-        // 弹窗
+        // 弹窗事件
         $('modal-close').addEventListener('click', closeModal);
         $('modal-cancel').addEventListener('click', closeModal);
         $('modal-edit').querySelector('.modal-backdrop').addEventListener('click', closeModal);
@@ -80,7 +76,7 @@
         $('modal-impact-ok').addEventListener('click', closeImpactModal);
         $('modal-impact').querySelector('.modal-backdrop').addEventListener('click', closeImpactModal);
 
-        // 分析标签
+        // 分析标签切换
         document.querySelectorAll('.tab-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var tab = this.getAttribute('data-tab');
@@ -91,6 +87,11 @@
                     tc.classList.toggle('active', tc.id === 'tab-' + tab);
                 });
             });
+        });
+
+        // 日期变化时刷新特殊情况面板
+        $('input-week-start').addEventListener('change', function() {
+            renderSpecialList();
         });
     }
 
@@ -134,7 +135,6 @@
             return;
         }
 
-        // 按班次分组显示
         var groups = { morning: [], middle: [], night: [] };
         state.employees.forEach(function(emp) {
             groups[emp.shift].push(emp);
@@ -146,7 +146,10 @@
             if (emps.length === 0) return;
             var conf = ShiftScheduler.SHIFT_CONFIG[shift];
             html += '<div class="emp-group">';
-            html += '<div class="emp-group-title">' + SHIFT_LABELS[shift] + ' <small>' + conf.time + '</small> <span class="emp-count">' + emps.length + '人</span></div>';
+            html += '<div class="emp-group-title">' + SHIFT_LABELS[shift] + ' <small>' + conf.time + '</small> <span class="emp-count">' + emps.length + '人</span>';
+            // 显示工作日需要几人
+            html += ' <span class="emp-need">工作日需' + conf.weekdayCount + '人</span>';
+            html += '</div>';
             emps.forEach(function(emp) {
                 html += '<div class="emp-tag ' + shift + '">';
                 html += '<span class="emp-name">' + emp.name + '</span>';
@@ -179,7 +182,6 @@
             return;
         }
 
-        // 生成本周日期选项
         var weekDates = [];
         var start = new Date(weekStart + 'T00:00:00');
         for (var i = 0; i < 7; i++) {
@@ -205,7 +207,6 @@
             html += '<option value="leave"' + (sp && sp.type === 'leave' ? ' selected' : '') + '>📝 请假</option>';
             html += '</select>';
             
-            // 日期选择（多选）
             html += '<div class="special-dates" data-name="' + emp.name + '"' + (!hasSpecial && (!sp || sp.type === 'none') ? ' style="display:none"' : '') + '>';
             weekDates.forEach(function(wd) {
                 var checked = sp && sp.days && sp.days.indexOf(wd.date) >= 0 ? ' checked' : '';
@@ -218,7 +219,6 @@
 
         el.innerHTML = html;
 
-        // 绑定类型切换
         el.querySelectorAll('.special-type').forEach(function(sel) {
             sel.addEventListener('change', function() {
                 var name = this.getAttribute('data-name');
@@ -237,7 +237,6 @@
             });
         });
 
-        // 绑定日期勾选
         el.querySelectorAll('.date-check input').forEach(function(cb) {
             cb.addEventListener('change', function() {
                 var name = this.getAttribute('data-emp');
@@ -254,11 +253,6 @@
             });
         });
     }
-
-    // 日期变化时刷新特殊情况面板
-    $('input-week-start').addEventListener('change', function() {
-        renderSpecialList();
-    });
 
     // === 生成排班 ===
     function generateSchedule() {
@@ -285,9 +279,68 @@
         state.result = scheduler.generate();
 
         renderSchedule();
+        renderCoverage();
         renderAnalysis();
         saveState();
         showToast('排班生成成功！' + state.result.analysis.summary.weekType);
+    }
+
+    // === 覆盖率面板 ===
+    function renderCoverage() {
+        if (!state.result) return;
+        var el = $('coverage-panel');
+        var coverage = state.result.analysis.shiftCoverage;
+        if (!coverage) { el.style.display = 'none'; return; }
+
+        var hasShortage = false;
+        var html = '<div class="coverage-title">📊 班次覆盖情况</div>';
+        html += '<div class="coverage-grid">';
+
+        state.result.dates.forEach(function(dateStr) {
+            var meta = state.result.dateMeta[dateStr];
+            var dayCov = coverage[dateStr];
+            if (!dayCov) return;
+
+            var dayStatus = 'ok';
+            ['morning', 'middle', 'night'].forEach(function(shift) {
+                if (dayCov[shift] && dayCov[shift].isShort) {
+                    dayStatus = 'short';
+                    hasShortage = true;
+                }
+            });
+
+            html += '<div class="coverage-day ' + dayStatus + '">';
+            html += '<div class="cov-date">' + dateStr.slice(5) + '</div>';
+            html += '<div class="cov-day">周' + meta.dayName + '</div>';
+            
+            if (meta.isReducedDay) {
+                html += '<div class="cov-tag reduced">减半日</div>';
+            } else {
+                html += '<div class="cov-tag full">满员日</div>';
+            }
+
+            ['morning', 'middle', 'night'].forEach(function(shift) {
+                var c = dayCov[shift];
+                if (!c) return;
+                var statusCls = c.isShort ? 'short' : 'ok';
+                var icon = c.isShort ? '⚠️' : '✅';
+                html += '<div class="cov-shift ' + statusCls + '">';
+                html += '<span class="cov-shift-name">' + SHIFT_SHORT[shift] + '</span>';
+                html += '<span class="cov-shift-count">' + c.actual + '/' + c.expected + '</span>';
+                html += '<span class="cov-shift-icon">' + icon + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+
+        html += '</div>';
+        
+        if (!hasShortage) {
+            html += '<div class="coverage-ok">✅ 所有班次人员充足，排班合理</div>';
+        }
+
+        el.innerHTML = html;
+        el.style.display = 'block';
     }
 
     // === 渲染排班表 ===
@@ -302,19 +355,24 @@
         }
     }
 
-    // 周视图：7列，每列一天
+    // 周视图
     function renderWeekView() {
         var r = state.result;
+        var coverage = r.analysis.shiftCoverage || {};
+
         var html = '<table class="week-table"><thead><tr>';
         
         r.dates.forEach(function(dateStr) {
             var meta = r.dateMeta[dateStr];
             var cls = meta.isWeekend ? ' weekend' : '';
-            var restTag = meta.isRestDay ? '<span class="rest-tag">休息日</span>' : '';
+            // 在表头标注满员日/减半日
+            var dayTag = meta.isReducedDay 
+                ? '<span class="day-type-tag reduced">减半</span>' 
+                : '<span class="day-type-tag full">满员</span>';
             html += '<th class="' + cls + '">';
             html += '<div class="th-date">' + dateStr.slice(5) + '</div>';
             html += '<div class="th-day">周' + meta.dayName + '</div>';
-            html += restTag;
+            html += dayTag;
             html += '</th>';
         });
         html += '</tr></thead><tbody>';
@@ -331,11 +389,23 @@
                 var people = daySched[shift] || [];
                 var cellCls = meta.isWeekend ? ' weekend-cell' : '';
                 
+                // 检查此班次此天是否缺员
+                var dayCov = coverage[dateStr];
+                var isShort = dayCov && dayCov[shift] && dayCov[shift].isShort;
+                if (isShort) cellCls += ' shortage-cell';
+
                 html += '<td class="shift-cell' + cellCls + '" data-date="' + dateStr + '">';
                 if (idx === 0) {
                     html += '<div class="shift-label" style="background:' + color.bg + ';color:' + color.text + ';border:1px solid ' + color.border + '">';
                     html += SHIFT_LABELS[shift] + ' <small>' + conf.time + '</small>';
                     html += '</div>';
+                }
+
+                // 显示需求人数 vs 实际人数
+                if (dayCov && dayCov[shift]) {
+                    var c = dayCov[shift];
+                    var countCls = c.isShort ? 'count-short' : 'count-ok';
+                    html += '<div class="cell-count ' + countCls + '">' + c.actual + '/' + c.expected + '人</div>';
                 }
                 
                 if (people.length === 0) {
@@ -361,6 +431,7 @@
             var restPeople = daySched.rest || [];
             
             html += '<td class="shift-cell rest-cell' + cellCls + '">';
+            html += '<div class="rest-header">😴 休息 <small>' + restPeople.length + '人</small></div>';
             if (restPeople.length === 0) {
                 html += '<div class="cell-empty">全员在岗</div>';
             } else {
@@ -379,7 +450,7 @@
         html += '</tbody></table>';
         $('schedule-container').innerHTML = html;
 
-        // 点击人名切换上班/休息
+        // 点击人名切换
         $('schedule-container').querySelectorAll('.cell-person').forEach(function(el) {
             el.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -389,7 +460,7 @@
             });
         });
 
-        // 点击单元格打开编辑弹窗
+        // 点击空白区域打开编辑弹窗
         $('schedule-container').querySelectorAll('.shift-cell').forEach(function(cell) {
             cell.addEventListener('click', function() {
                 var dateStr = this.getAttribute('data-date');
@@ -398,7 +469,7 @@
         });
     }
 
-    // 人员视图：每人一行
+    // 人员视图
     function renderPersonView() {
         var r = state.result;
         var analysis = r.analysis;
@@ -409,8 +480,11 @@
         r.dates.forEach(function(dateStr) {
             var meta = r.dateMeta[dateStr];
             var cls = meta.isWeekend ? ' weekend' : '';
-            html += '<th class="' + cls + '">' + dateStr.slice(8) + '<br><small>周' + meta.dayName + '</small></th>';
+            var dayTag = meta.isReducedDay ? '<br><small class="day-type-mini reduced">减半</small>' : '<br><small class="day-type-mini full">满员</small>';
+            html += '<th class="' + cls + '">' + dateStr.slice(8) + '<br><small>周' + meta.dayName + '</small>' + dayTag + '</th>';
         });
+        html += '<th>工作天</th>';
+        html += '<th>休息天</th>';
         html += '<th>本周状态</th>';
         html += '</tr></thead><tbody>';
 
@@ -437,7 +511,11 @@
                 html += '</td>';
             });
 
-            // 本周状态标签
+            // 工作/休息天数
+            html += '<td class="stat-cell">' + (personData ? personData.workDays.length : '-') + '天</td>';
+            html += '<td class="stat-cell">' + (personData ? personData.restDays.length : '-') + '天</td>';
+
+            // 状态标签
             html += '<td>';
             if (personData) {
                 var labelColor = personData.restType === 'double' ? '#059669' :
@@ -456,7 +534,6 @@
         html += '</tbody></table>';
         $('schedule-container').innerHTML = html;
 
-        // 点击切换
         $('schedule-container').querySelectorAll('.day-cell').forEach(function(cell) {
             cell.addEventListener('click', function() {
                 var name = this.getAttribute('data-name');
@@ -466,25 +543,21 @@
         });
     }
 
-    // 切换某人某天的上班/休息状态
+    // 切换某人某天状态
     function togglePersonDay(name, dateStr) {
         if (!state.scheduler) return;
         var daySched = state.result.schedule[dateStr];
         var isResting = daySched.rest.indexOf(name) >= 0;
 
-        // 保存旧分析
         var oldAnalysis = state.result.analysis;
 
-        // 切换状态
         state.scheduler.updateDay(dateStr, name, isResting ? 'work' : 'rest');
-        
-        // 重新分析
         state.result.analysis = state.scheduler.reAnalyze();
         
         renderSchedule();
+        renderCoverage();
         renderAnalysis();
 
-        // 显示影响
         showImpact(name, dateStr, isResting ? '休息→上班' : '上班→休息', oldAnalysis);
     }
 
@@ -493,23 +566,66 @@
         if (!state.result) return;
         var meta = state.result.dateMeta[dateStr];
         var daySched = state.result.schedule[dateStr];
+        var coverage = state.result.analysis.shiftCoverage[dateStr];
 
-        $('modal-title').textContent = dateStr + '（周' + meta.dayName + '）编辑';
+        var dayTypeText = meta.isReducedDay ? '（🟡 减半日：班次可减半）' : '（🟢 满员日：所有班次必须满员）';
+        $('modal-title').textContent = dateStr + '（周' + meta.dayName + '）' + dayTypeText;
 
-        var html = '<div class="edit-hint">💡 点击「上班/休息」切换状态，保存后自动重新分析</div>';
+        var html = '<div class="edit-hint">💡 修改后系统会自动检测满员情况并重新分析</div>';
         
-        state.employees.forEach(function(emp) {
-            var isResting = daySched.rest.indexOf(emp.name) >= 0;
-            var personData = state.result.analysis.perPerson[emp.name];
-            var issueCount = personData ? personData.issues.length : 0;
-            var issueTag = issueCount > 0 ? '<span class="edit-issue-count">' + issueCount + '⚠</span>' : '';
+        // 先显示各班次的覆盖情况
+        if (coverage) {
+            html += '<div class="edit-coverage">';
+            ['morning', 'middle', 'night'].forEach(function(shift) {
+                var c = coverage[shift];
+                if (!c) return;
+                var statusIcon = c.isShort ? '⚠️ 缺员' : '✅ 满员';
+                var statusCls = c.isShort ? 'short' : 'ok';
+                html += '<span class="edit-cov-item ' + statusCls + '">' + SHIFT_LABELS[shift] + ' ' + c.actual + '/' + c.expected + ' ' + statusIcon + '</span>';
+            });
+            html += '</div>';
+        }
+
+        // 按班次分组显示员工
+        ['morning', 'middle', 'night'].forEach(function(shift) {
+            var conf = ShiftScheduler.SHIFT_CONFIG[shift];
+            var emps = state.employees.filter(function(e) { return e.shift === shift; });
+            if (emps.length === 0) return;
+
+            var expectedCount = meta.isReducedDay ? conf.weekendReducedCount : conf.weekdayCount;
+            var actualCount = daySched[shift].length;
             
-            html += '<div class="edit-row">';
-            html += '<span class="edit-name">' + emp.name + ' <small class="edit-shift">' + SHIFT_LABELS[emp.shift] + '</small>' + issueTag + '</span>';
-            html += '<select class="edit-select" data-name="' + emp.name + '">';
-            html += '<option value="work"' + (!isResting ? ' selected' : '') + '>🔵 上班（' + ShiftScheduler.SHIFT_CONFIG[emp.shift].time + '）</option>';
-            html += '<option value="rest"' + (isResting ? ' selected' : '') + '>😴 休息</option>';
-            html += '</select>';
+            html += '<div class="edit-shift-group">';
+            html += '<div class="edit-shift-title">' + SHIFT_LABELS[shift] + ' ' + conf.time;
+            html += ' <span class="edit-shift-need">需' + expectedCount + '人，当前' + actualCount + '人</span>';
+            html += '</div>';
+
+            emps.forEach(function(emp) {
+                var isResting = daySched.rest.indexOf(emp.name) >= 0;
+                var personData = state.result.analysis.perPerson[emp.name];
+                var issueCount = personData ? personData.issues.length : 0;
+                var dangerCount = personData ? personData.issues.filter(function(i) { return i.level === 'danger'; }).length : 0;
+                var issueTag = '';
+                if (dangerCount > 0) {
+                    issueTag = '<span class="edit-issue-count danger">' + issueCount + '⚠</span>';
+                } else if (issueCount > 0) {
+                    issueTag = '<span class="edit-issue-count warning">' + issueCount + '⚠</span>';
+                }
+                
+                // 显示这人本周休息天数和工作天数
+                var weekInfo = '';
+                if (personData) {
+                    weekInfo = '<small class="edit-week-info">本周已工作' + personData.workDays.length + '天 休息' + personData.restDays.length + '天 ' + personData.restLabel + '</small>';
+                }
+
+                html += '<div class="edit-row">';
+                html += '<span class="edit-name">' + emp.name + ' ' + issueTag + weekInfo + '</span>';
+                html += '<select class="edit-select" data-name="' + emp.name + '">';
+                html += '<option value="work"' + (!isResting ? ' selected' : '') + '>🔵 上班（' + conf.time + '）</option>';
+                html += '<option value="rest"' + (isResting ? ' selected' : '') + '>😴 休息</option>';
+                html += '</select>';
+                html += '</div>';
+            });
             html += '</div>';
         });
 
@@ -527,6 +643,7 @@
             state.result.analysis = state.scheduler.reAnalyze();
             closeModal();
             renderSchedule();
+            renderCoverage();
             renderAnalysis();
             showImpactFull(dateStr, oldAnalysis);
         };
@@ -535,7 +652,7 @@
     function closeModal() { $('modal-edit').style.display = 'none'; }
     function closeImpactModal() { $('modal-impact').style.display = 'none'; }
 
-    // === 影响提示（简单版，点击切换时） ===
+    // === 影响提示 ===
     function showImpact(name, dateStr, action, oldAnalysis) {
         var newData = state.result.analysis.perPerson[name];
         var oldData = oldAnalysis.perPerson[name];
@@ -545,10 +662,20 @@
         if (newData.restLabel !== oldData.restLabel) {
             msg += ' → 本周变为' + newData.restLabel;
         }
+
+        // 检查是否导致缺员
+        var coverage = state.result.analysis.shiftCoverage[dateStr];
+        if (coverage) {
+            var emp = state.employees.find(function(e) { return e.name === name; });
+            if (emp && coverage[emp.shift] && coverage[emp.shift].isShort) {
+                msg += ' ⚠️ 注意：' + SHIFT_LABELS[emp.shift] + '缺员了！';
+            }
+        }
+
         showToast(msg);
     }
 
-    // === 影响分析弹窗（完整版，编辑弹窗保存时） ===
+    // 影响分析弹窗
     function showImpactFull(dateStr, oldAnalysis) {
         var newAnalysis = state.result.analysis;
         var changes = [];
@@ -560,6 +687,7 @@
 
             var diff = {
                 name: emp.name,
+                shift: emp.shift,
                 restChanged: newD.restLabel !== oldD.restLabel,
                 oldRestLabel: oldD.restLabel,
                 newRestLabel: newD.restLabel,
@@ -582,40 +710,79 @@
             }
         });
 
-        if (changes.length === 0) {
+        // 检查覆盖变化
+        var coverageChanges = [];
+        var newCov = newAnalysis.shiftCoverage[dateStr];
+        var oldCov = oldAnalysis.shiftCoverage[dateStr];
+        if (newCov && oldCov) {
+            ['morning', 'middle', 'night'].forEach(function(shift) {
+                var nc = newCov[shift];
+                var oc = oldCov[shift];
+                if (!nc || !oc) return;
+                if (nc.isShort !== oc.isShort) {
+                    coverageChanges.push({
+                        shift: shift,
+                        wasShort: oc.isShort,
+                        isShort: nc.isShort,
+                        actual: nc.actual,
+                        expected: nc.expected
+                    });
+                }
+            });
+        }
+
+        if (changes.length === 0 && coverageChanges.length === 0) {
             showToast('已更新 ' + dateStr + ' 排班');
             return;
         }
 
         var html = '<div class="impact-date">📅 调整日期：' + dateStr + '</div>';
-        html += '<div class="impact-list">';
 
-        changes.forEach(function(c) {
-            html += '<div class="impact-person">';
-            html += '<div class="impact-name">' + c.name + '</div>';
-            
-            if (c.restChanged) {
-                html += '<div class="impact-rest-change">' + c.oldRestLabel + ' → ' + c.newRestLabel + '</div>';
-            }
-            if (c.workDiff !== 0) {
-                var icon = c.workDiff > 0 ? '📈' : '📉';
-                html += '<div class="impact-work">' + icon + ' 工作天数 ' + (c.workDiff > 0 ? '+' : '') + c.workDiff + '天</div>';
-            }
-            c.newIssues.forEach(function(issue) {
-                html += '<div class="impact-issue new">⚠️ 新增：' + issue.text + '</div>';
-            });
-            c.resolvedIssues.forEach(function(issue) {
-                html += '<div class="impact-issue resolved">✅ 已解决：' + issue.text + '</div>';
+        // 覆盖变化
+        if (coverageChanges.length > 0) {
+            html += '<div class="impact-coverage">';
+            html += '<h4>📊 班次覆盖变化</h4>';
+            coverageChanges.forEach(function(cc) {
+                if (cc.isShort) {
+                    html += '<div class="impact-cov-item short">⚠️ ' + SHIFT_LABELS[cc.shift] + ' 变为缺员（' + cc.actual + '/' + cc.expected + '人）</div>';
+                } else {
+                    html += '<div class="impact-cov-item ok">✅ ' + SHIFT_LABELS[cc.shift] + ' 恢复满员（' + cc.actual + '/' + cc.expected + '人）</div>';
+                }
             });
             html += '</div>';
-        });
+        }
 
-        html += '</div>';
+        // 人员变化
+        if (changes.length > 0) {
+            html += '<div class="impact-list">';
+            html += '<h4>👥 人员影响</h4>';
+            changes.forEach(function(c) {
+                html += '<div class="impact-person">';
+                html += '<div class="impact-name">' + c.name + ' <small>(' + SHIFT_LABELS[c.shift] + ')</small></div>';
+                
+                if (c.restChanged) {
+                    html += '<div class="impact-rest-change">' + c.oldRestLabel + ' → ' + c.newRestLabel + '</div>';
+                }
+                if (c.workDiff !== 0) {
+                    var icon = c.workDiff > 0 ? '📈' : '📉';
+                    html += '<div class="impact-work">' + icon + ' 工作天数 ' + (c.workDiff > 0 ? '+' : '') + c.workDiff + '天</div>';
+                }
+                c.newIssues.forEach(function(issue) {
+                    html += '<div class="impact-issue new">⚠️ 新增：' + issue.text + '</div>';
+                });
+                c.resolvedIssues.forEach(function(issue) {
+                    html += '<div class="impact-issue resolved">✅ 已解决：' + issue.text + '</div>';
+                });
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
         $('modal-impact-body').innerHTML = html;
         $('modal-impact').style.display = 'flex';
     }
 
-    // === 分析面板渲染 ===
+    // === 分析面板 ===
     function renderAnalysis() {
         if (!state.result) return;
         $('analysis-panel').style.display = 'block';
@@ -645,7 +812,6 @@
     function renderOverview(analysis) {
         var html = '';
         
-        // 概要
         var s = analysis.summary;
         html += '<div class="overview-summary">';
         html += '<div class="summary-item">👥 ' + s.totalEmployees + '人</div>';
@@ -654,7 +820,6 @@
         html += '<div class="summary-item">🗓️ ' + s.dateRange + '</div>';
         html += '</div>';
 
-        // 建议
         html += '<div class="suggestions">';
         html += '<h3>💡 智能建议</h3>';
         analysis.suggestions.forEach(function(sug) {
@@ -662,7 +827,6 @@
         });
         html += '</div>';
 
-        // 快速概览：每人休息类型一览
         html += '<div class="rest-overview">';
         html += '<h3>😴 本周休息一览</h3>';
         html += '<div class="rest-tags">';
@@ -688,7 +852,7 @@
 
     function renderWeeklyDetail(analysis) {
         var html = '<table class="detail-table"><thead><tr>';
-        html += '<th>员工</th><th>固定班次</th><th>工作天数</th><th>休息天数</th><th>总工时</th><th>周末值班</th><th>最长连续工作</th><th>本周状态</th>';
+        html += '<th>员工</th><th>固定班次</th><th>工作天数</th><th>休息天数</th><th>总工时</th><th>周末值班</th><th>最长连续</th><th>本周状态</th>';
         html += '</tr></thead><tbody>';
 
         state.employees.forEach(function(emp) {
@@ -736,7 +900,6 @@
             html += '<div class="pr-stat"><span class="ps-label">状态</span><span class="ps-value">' + d.restLabel + '</span></div>';
             html += '</div>';
 
-            // 问题
             if (d.issues.length > 0) {
                 html += '<div class="pr-issues">';
                 d.issues.forEach(function(issue) {
@@ -748,7 +911,7 @@
                 html += '<div class="pr-issues"><div class="pr-issue issue-ok">✅ 排班合理</div></div>';
             }
 
-            // 每日详情
+            // 每日色块
             html += '<div class="pr-days">';
             state.result.dates.forEach(function(dateStr) {
                 var meta = state.result.dateMeta[dateStr];
