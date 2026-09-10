@@ -1,6 +1,14 @@
 /**
- * 排班系统前端交互
- * 负责：员工管理、生成排班、日历/列表渲染、手动编辑、导出、本地持久化
+ * 排班系统前端交互（v2 - 含健康分析）
+ * 
+ * 新增功能：
+ * - 实时健康分析：生成/手动调整后自动运行分析器
+ * - 预警横幅：危险问题自动置顶提醒
+ * - 幸福指数排名：每人一个分数+进度条
+ * - 每周休息详情表：双休/单休/连休/无休 一目了然
+ * - 公平性仪表盘：工时/休天/周末值班 对比图
+ * - 个人详细报告：问题列表+建议
+ * - 调整影响弹窗：修改后对比谁失去/获得了休息
  */
 
 (function() {
@@ -11,10 +19,11 @@
         employees: [],
         scheduler: null,
         schedule: null,
-        currentView: 'calendar' // 'calendar' | 'list'
+        analysisResult: null,
+        snapshotBeforeEdit: null, // 编辑前快照，用于对比
+        currentView: 'calendar'
     };
 
-    // 头像颜色池
     var COLORS = [
         '#4f46e5','#059669','#d97706','#dc2626','#7c3aed',
         '#0891b2','#be185d','#65a30d','#ea580c','#6366f1',
@@ -25,45 +34,56 @@
     var SHIFT_NAMES = { morning: '早班', middle: '中班', night: '晚班', rest: '休息' };
     var DAY_NAMES = ['日','一','二','三','四','五','六'];
 
-    // === DOM 元素缓存 ===
-    var $inputEmployee = document.getElementById('input-employee');
-    var $btnAddEmployee = document.getElementById('btn-add-employee');
-    var $employeeList = document.getElementById('employee-list');
-    var $btnDemoEmployees = document.getElementById('btn-demo-employees');
-    var $inputMonth = document.getElementById('input-month');
-    var $selectFirstWeek = document.getElementById('select-first-week');
-    var $inputWeekdayCount = document.getElementById('input-weekday-count');
-    var $inputWeekendCount = document.getElementById('input-weekend-count');
-    var $checkNightShift = document.getElementById('check-night-shift');
-    var $btnGenerate = document.getElementById('btn-generate');
-    var $btnExport = document.getElementById('btn-export');
-    var $btnSave = document.getElementById('btn-save');
-    var $btnViewCalendar = document.getElementById('btn-view-calendar');
-    var $btnViewList = document.getElementById('btn-view-list');
-    var $scheduleContainer = document.getElementById('schedule-container');
-    var $statsPanel = document.getElementById('stats-panel');
-    var $statsGrid = document.getElementById('stats-grid');
-    var $modal = document.getElementById('modal-edit');
-    var $modalTitle = document.getElementById('modal-title');
-    var $modalBody = document.getElementById('modal-body');
-    var $modalClose = document.getElementById('modal-close');
-    var $modalCancel = document.getElementById('modal-cancel');
-    var $modalSave = document.getElementById('modal-save');
+    // === DOM 缓存 ===
+    var $ = function(id) { return document.getElementById(id); };
+    var $inputEmployee = $('input-employee');
+    var $btnAddEmployee = $('btn-add-employee');
+    var $employeeList = $('employee-list');
+    var $btnDemoEmployees = $('btn-demo-employees');
+    var $inputMonth = $('input-month');
+    var $selectFirstWeek = $('select-first-week');
+    var $inputWeekdayCount = $('input-weekday-count');
+    var $inputWeekendCount = $('input-weekend-count');
+    var $checkNightShift = $('check-night-shift');
+    var $btnGenerate = $('btn-generate');
+    var $btnExport = $('btn-export');
+    var $btnSave = $('btn-save');
+    var $btnViewCalendar = $('btn-view-calendar');
+    var $btnViewList = $('btn-view-list');
+    var $scheduleContainer = $('schedule-container');
+    var $statsPanel = $('stats-panel');
+    var $statsGrid = $('stats-grid');
+    var $modal = $('modal-edit');
+    var $modalTitle = $('modal-title');
+    var $modalBody = $('modal-body');
+    var $modalClose = $('modal-close');
+    var $modalCancel = $('modal-cancel');
+    var $modalSave = $('modal-save');
+    // 新增DOM
+    var $warningBanner = $('warning-banner');
+    var $analysisPanel = $('analysis-panel');
+    var $suggestionsArea = $('suggestions-area');
+    var $happinessRanking = $('happiness-ranking');
+    var $weeklyRestGrid = $('weekly-rest-grid');
+    var $fairnessDashboard = $('fairness-dashboard');
+    var $employeeReports = $('employee-reports');
+    var $modalImpact = $('modal-impact');
+    var $modalImpactBody = $('modal-impact-body');
+    var $modalImpactClose = $('modal-impact-close');
+    var $modalImpactOk = $('modal-impact-ok');
 
     // === 初始化 ===
     function init() {
-        // 默认月份为当前月
         var now = new Date();
         var y = now.getFullYear();
         var m = String(now.getMonth() + 1);
         if (m.length < 2) m = '0' + m;
         $inputMonth.value = y + '-' + m;
 
-        // 从 localStorage 恢复
         loadState();
         renderEmployeeList();
 
-        // 绑定事件
+        // 事件绑定
         $btnAddEmployee.addEventListener('click', addEmployee);
         $inputEmployee.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') addEmployee();
@@ -77,6 +97,19 @@
         $modalClose.addEventListener('click', closeModal);
         $modalCancel.addEventListener('click', closeModal);
         $modal.querySelector('.modal-backdrop').addEventListener('click', closeModal);
+
+        // 影响弹窗关闭
+        $modalImpactClose.addEventListener('click', closeImpactModal);
+        $modalImpactOk.addEventListener('click', closeImpactModal);
+        $modalImpact.querySelector('.modal-backdrop').addEventListener('click', closeImpactModal);
+
+        // 分析面板标签切换
+        document.querySelectorAll('.tab-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var tab = this.getAttribute('data-tab');
+                switchAnalysisTab(tab);
+            });
+        });
     }
 
     // === 员工管理 ===
@@ -128,8 +161,6 @@
             '</div>';
         });
         $employeeList.innerHTML = html;
-
-        // 绑定删除事件
         $employeeList.querySelectorAll('.remove').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 removeEmployee(this.getAttribute('data-name'));
@@ -153,7 +184,6 @@
         var parts = monthVal.split('-');
         var year = parseInt(parts[0]);
         var month = parseInt(parts[1]);
-
         var enableNight = $checkNightShift.checked;
 
         try {
@@ -173,11 +203,272 @@
 
             renderSchedule();
             renderStats();
+            runAnalysis(); // 生成后立即分析
             saveState();
             showToast('排班生成成功！共 ' + Object.keys(state.schedule).length + ' 天');
         } catch (e) {
             showToast(e.message);
         }
+    }
+
+    // ===== 核心新功能：运行分析 =====
+    function runAnalysis() {
+        if (!state.scheduler || !state.schedule) return;
+
+        var dateMeta = state.scheduler.getDateMeta();
+        var shifts = state.scheduler.SHIFTS;
+
+        state.analysisResult = ShiftAnalyzer.analyze(
+            state.schedule, dateMeta, state.employees, shifts
+        );
+
+        $analysisPanel.style.display = 'block';
+        renderWarningBanner();
+        renderOverviewTab();
+        renderWeeklyTab();
+        renderFairnessTab();
+        renderEmployeeReportsTab();
+    }
+
+    // === 预警横幅 ===
+    function renderWarningBanner() {
+        var r = state.analysisResult;
+        if (r.warnings.length === 0) {
+            $warningBanner.style.display = 'none';
+            return;
+        }
+
+        var html = '<div class="warning-icon">⚠️</div><div class="warning-list">';
+        r.warnings.forEach(function(w) {
+            html += '<div class="warning-item">' + w.icon + ' ' + w.text + '</div>';
+        });
+        html += '</div>';
+        $warningBanner.innerHTML = html;
+        $warningBanner.style.display = 'flex';
+    }
+
+    // === 总览标签页 ===
+    function renderOverviewTab() {
+        var r = state.analysisResult;
+
+        // 建议区
+        var sugHtml = '<div class="suggestions-title">💡 智能建议</div>';
+        r.suggestions.forEach(function(s) {
+            sugHtml += '<div class="suggestion-item">' +
+                '<span class="sug-icon">' + s.icon + '</span>' +
+                '<span class="sug-text">' + s.text + '</span>' +
+            '</div>';
+        });
+        $suggestionsArea.innerHTML = sugHtml;
+
+        // 幸福指数排名
+        var sorted = state.employees.slice().sort(function(a, b) {
+            return r.employees[b].score - r.employees[a].score;
+        });
+
+        var rankHtml = '<div class="ranking-title">😊 幸福指数排名</div>';
+        rankHtml += '<div class="ranking-list">';
+        sorted.forEach(function(name, idx) {
+            var emp = r.employees[name];
+            var color = COLORS[state.employees.indexOf(name) % COLORS.length];
+            var scoreColor = emp.score >= 75 ? '#059669' :
+                             emp.score >= 50 ? '#d97706' : '#dc2626';
+            var medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1);
+            var issueCount = emp.issues.length;
+            var issueTag = issueCount > 0 ?
+                '<span class="issue-count" style="background:' +
+                (emp.issues.some(function(i) { return i.level === 'danger'; }) ? '#fef2f2;color:#dc2626' : '#fffbeb;color:#d97706') +
+                '">' + issueCount + '个问题</span>' : '<span class="issue-count ok">无问题</span>';
+
+            rankHtml += '<div class="ranking-item">';
+            rankHtml += '<span class="rank-medal">' + medal + '</span>';
+            rankHtml += '<span class="rank-name" style="color:' + color + '">' + name + '</span>';
+            rankHtml += '<div class="rank-bar-wrapper">';
+            rankHtml += '<div class="rank-bar" style="width:' + emp.score + '%;background:' + scoreColor + '"></div>';
+            rankHtml += '</div>';
+            rankHtml += '<span class="rank-score" style="color:' + scoreColor + '">' + emp.score + '分</span>';
+            rankHtml += issueTag;
+            rankHtml += '</div>';
+        });
+        rankHtml += '</div>';
+        $happinessRanking.innerHTML = rankHtml;
+    }
+
+    // === 每周详情标签页 ===
+    function renderWeeklyTab() {
+        var r = state.analysisResult;
+        var weeks = r.weeklyBreakdown;
+        var weekKeys = Object.keys(weeks).sort(function(a, b) { return a - b; });
+
+        var html = '<table class="weekly-table"><thead><tr>';
+        html += '<th>员工</th>';
+        weekKeys.forEach(function(wk) {
+            var w = weeks[wk];
+            var typeLabel = w.weekType === 'big' ? '大休周' : '小休周';
+            // 显示日期范围
+            var firstDate = w.dates[0].slice(5); // MM-DD
+            var lastDate = w.dates[w.dates.length - 1].slice(5);
+            html += '<th>第' + (parseInt(wk) + 1) + '周<br><small>' + firstDate + '~' + lastDate + '</small><br><small class="week-type-label ' + w.weekType + '">' + typeLabel + '</small></th>';
+        });
+        html += '</tr></thead><tbody>';
+
+        state.employees.forEach(function(name) {
+            var emp = r.employees[name];
+            html += '<tr><td class="name-cell">' + name + '</td>';
+            weekKeys.forEach(function(wk) {
+                var wr = emp.weeklyRest[wk];
+                if (!wr) {
+                    html += '<td>-</td>';
+                    return;
+                }
+                var restCount = wr.restDays.length;
+                var restDatesStr = wr.restDays.map(function(d) {
+                    var day = new Date(d).getDay();
+                    return d.slice(8) + '(' + DAY_NAMES[day] + ')';
+                }).join(' ');
+
+                html += '<td>';
+                html += '<span class="weekly-rest-badge" style="background:' + wr.color + '20;color:' + wr.color + ';border:1px solid ' + wr.color + '40">';
+                html += wr.label;
+                html += '</span>';
+                if (restCount > 0) {
+                    html += '<div class="weekly-rest-dates">' + restDatesStr + '</div>';
+                }
+                html += '</td>';
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        $weeklyRestGrid.innerHTML = html;
+    }
+
+    // === 公平性标签页 ===
+    function renderFairnessTab() {
+        var r = state.analysisResult;
+        var f = r.fairness;
+
+        var html = '<div class="fairness-cards">';
+
+        // 工作天数对比
+        html += _buildFairnessCard('📊 工作天数', f.workDays, '天', state.employees, function(name) {
+            return r.employees[name].workDays.length;
+        });
+
+        // 总工时对比
+        html += _buildFairnessCard('⏱️ 总工时', f.workHours, '小时', state.employees, function(name) {
+            return r.employees[name].totalWorkHours;
+        });
+
+        // 休息天数对比
+        html += _buildFairnessCard('😴 休息天数', f.restDays, '天', state.employees, function(name) {
+            return r.employees[name].shiftCounts.rest;
+        });
+
+        // 周末值班对比
+        html += _buildFairnessCard('📅 周末值班', f.weekendDuty, '天', state.employees, function(name) {
+            return r.employees[name].weekendDutyDays.length;
+        });
+
+        html += '</div>';
+
+        // 标准差提示
+        html += '<div class="fairness-summary">';
+        html += '<div class="fairness-metric">工作天数标准差: <strong>' + f.workDays.std + '</strong> ' + _stdLevel(f.workDays.std, 2) + '</div>';
+        html += '<div class="fairness-metric">工时标准差: <strong>' + f.workHours.std + '</strong> ' + _stdLevel(f.workHours.std, 15) + '</div>';
+        html += '<div class="fairness-metric">周末值班标准差: <strong>' + f.weekendDuty.std + '</strong> ' + _stdLevel(f.weekendDuty.std, 1.5) + '</div>';
+        html += '</div>';
+
+        $fairnessDashboard.innerHTML = html;
+    }
+
+    function _buildFairnessCard(title, metric, unit, employees, getValue) {
+        var maxVal = metric.max || 1;
+        var html = '<div class="fairness-card">';
+        html += '<div class="fc-title">' + title + ' <small>(均值' + metric.avg + unit + ')</small></div>';
+        html += '<div class="fc-bars">';
+
+        // 按值排序
+        var sorted = employees.slice().sort(function(a, b) { return getValue(b) - getValue(a); });
+        sorted.forEach(function(name) {
+            var val = getValue(name);
+            var pct = Math.round(val / maxVal * 100);
+            var color = COLORS[employees.indexOf(name) % COLORS.length];
+            html += '<div class="fc-bar-row">';
+            html += '<span class="fc-bar-name">' + name + '</span>';
+            html += '<div class="fc-bar-track"><div class="fc-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+            html += '<span class="fc-bar-value">' + val + unit + '</span>';
+            html += '</div>';
+        });
+
+        html += '</div></div>';
+        return html;
+    }
+
+    function _stdLevel(std, threshold) {
+        if (std <= threshold * 0.5) return '<span class="level-good">✅ 非常均衡</span>';
+        if (std <= threshold) return '<span class="level-ok">🟡 基本均衡</span>';
+        return '<span class="level-bad">🔴 偏差较大</span>';
+    }
+
+    // === 个人报告标签页 ===
+    function renderEmployeeReportsTab() {
+        var r = state.analysisResult;
+        var html = '';
+
+        state.employees.forEach(function(name, i) {
+            var emp = r.employees[name];
+            var color = COLORS[i % COLORS.length];
+            var scoreColor = emp.score >= 75 ? '#059669' : emp.score >= 50 ? '#d97706' : '#dc2626';
+
+            html += '<div class="emp-report">';
+            html += '<div class="emp-report-header">';
+            html += '<div class="emp-report-name" style="color:' + color + '">';
+            html += '<span class="avatar" style="background:' + color + '">' + name.charAt(0) + '</span>';
+            html += name;
+            html += '</div>';
+            html += '<div class="emp-report-score" style="color:' + scoreColor + '">';
+            html += '<span class="score-num">' + emp.score + '</span><span class="score-label">幸福指数</span>';
+            html += '</div>';
+            html += '</div>';
+
+            // 关键指标
+            html += '<div class="emp-metrics">';
+            html += '<div class="emp-metric"><span class="em-label">工作天数</span><span class="em-value">' + emp.workDays.length + '天</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">休息天数</span><span class="em-value">' + emp.shiftCounts.rest + '天</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">总工时</span><span class="em-value">' + emp.totalWorkHours + 'h</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">最长连续工作</span><span class="em-value">' + emp.maxConsecutiveWork + '天</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">周末值班</span><span class="em-value">' + emp.weekendDutyDays.length + '天</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">最长连续休息</span><span class="em-value">' + emp.longestRest + '天</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">有双休</span><span class="em-value">' + (emp.hasDoubleRest ? '✅ 是' : '❌ 无') + '</span></div>';
+            html += '<div class="emp-metric"><span class="em-label">班次分布</span><span class="em-value">早' + emp.shiftCounts.morning + ' 中' + emp.shiftCounts.middle + ' 晚' + (emp.shiftCounts.night || 0) + '</span></div>';
+            html += '</div>';
+
+            // 问题列表
+            if (emp.issues.length > 0) {
+                html += '<div class="emp-issues">';
+                emp.issues.forEach(function(issue) {
+                    html += '<div class="emp-issue ' + issue.level + '">' + issue.icon + ' ' + issue.text + '</div>';
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="emp-issues"><div class="emp-issue ok">✅ 排班合理，没有发现问题</div></div>';
+            }
+
+            html += '</div>';
+        });
+
+        $employeeReports.innerHTML = html;
+    }
+
+    // === 分析标签切换 ===
+    function switchAnalysisTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+        });
+        document.querySelectorAll('.tab-content').forEach(function(tc) {
+            tc.classList.toggle('active', tc.id === 'tab-' + tab);
+        });
     }
 
     // === 日历视图 ===
@@ -189,35 +480,27 @@
         if (dates.length === 0) return;
 
         var firstDate = new Date(dates[0]);
-        var startDayOfWeek = firstDate.getDay(); // 0=周日
-
-        // 调整为周一开始：把周日变成6，其他减1
+        var startDayOfWeek = firstDate.getDay();
         var offset = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
         var html = '<div class="calendar-grid">';
-
-        // 星期头部（周一开始）
         var headers = ['一','二','三','四','五','六','日'];
         headers.forEach(function(h, i) {
             var cls = i >= 5 ? ' weekend' : '';
             html += '<div class="calendar-header' + cls + '">' + h + '</div>';
         });
 
-        // 空白填充
         for (var i = 0; i < offset; i++) {
             html += '<div class="calendar-cell empty"></div>';
         }
 
-        // 日期格子
         dates.forEach(function(dateStr) {
             var meta = dateMeta[dateStr];
             var daySched = schedule[dateStr];
-
             var cellClass = 'calendar-cell';
             if (meta.isWeekend) cellClass += ' weekend';
             if (meta.isRest) cellClass += ' rest-day';
 
-            // 日期类型标记
             var typeLabel = '';
             if (meta.isRest && meta.weekType === 'big') {
                 typeLabel = '<span class="day-type big-rest">大休</span>';
@@ -234,8 +517,7 @@
             html += '</div>';
             html += '<div class="calendar-shifts">';
 
-            var shifts = scheduler.SHIFTS;
-            shifts.forEach(function(shift) {
+            scheduler.SHIFTS.forEach(function(shift) {
                 var people = daySched[shift] || [];
                 if (people.length > 0) {
                     html += '<div class="calendar-shift-row">';
@@ -245,7 +527,6 @@
                 }
             });
 
-            // 休息人员
             var restPeople = daySched.rest || [];
             if (restPeople.length > 0) {
                 html += '<div class="calendar-shift-row">';
@@ -260,7 +541,6 @@
         html += '</div>';
         $scheduleContainer.innerHTML = html;
 
-        // 绑定日期格子点击事件（打开编辑弹窗）
         $scheduleContainer.querySelectorAll('.calendar-cell:not(.empty)').forEach(function(cell) {
             cell.addEventListener('click', function() {
                 openEditModal(this.getAttribute('data-date'));
@@ -296,8 +576,7 @@
                 html += '<td class="' + cellCls + '">';
                 html += '<span class="cell-badge ' + shift + '" data-date="' + dateStr + '" data-name="' + name + '">';
                 html += SHIFT_LABELS[shift];
-                html += '</span>';
-                html += '</td>';
+                html += '</span></td>';
             });
             html += '</tr>';
         });
@@ -305,7 +584,6 @@
         html += '</tbody></table></div>';
         $scheduleContainer.innerHTML = html;
 
-        // 绑定单元格点击
         $scheduleContainer.querySelectorAll('.cell-badge').forEach(function(badge) {
             badge.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -314,15 +592,11 @@
         });
     }
 
-    // 查找某人在某天的班次
     function getEmployeeShift(daySched, name, shifts) {
         for (var i = 0; i < shifts.length; i++) {
             if (daySched[shifts[i]] && daySched[shifts[i]].indexOf(name) >= 0) {
                 return shifts[i];
             }
-        }
-        if (daySched.rest && daySched.rest.indexOf(name) >= 0) {
-            return 'rest';
         }
         return 'rest';
     }
@@ -346,7 +620,6 @@
     // === 统计面板 ===
     function renderStats() {
         if (!state.scheduler) return;
-
         var stats = state.scheduler.getStats();
         $statsPanel.style.display = 'block';
 
@@ -372,7 +645,7 @@
         $statsGrid.innerHTML = html;
     }
 
-    // === 编辑弹窗 ===
+    // === 编辑弹窗（含快照对比功能） ===
     function openEditModal(dateStr) {
         if (!state.scheduler || !state.schedule) return;
 
@@ -380,13 +653,32 @@
         var daySched = state.schedule[dateStr];
         var shifts = state.scheduler.SHIFTS;
 
+        // 保存编辑前快照（深拷贝当天数据）
+        state.snapshotBeforeEdit = {};
+        var allShifts = shifts.concat(['rest']);
+        allShifts.forEach(function(s) {
+            state.snapshotBeforeEdit[s] = (daySched[s] || []).slice();
+        });
+        state.snapshotBeforeEdit._date = dateStr;
+
         $modalTitle.textContent = dateStr + '（周' + DAY_NAMES[meta.dayOfWeek] + '）排班编辑';
 
-        var html = '';
+        var html = '<div class="edit-hint">💡 修改后系统会自动重新分析，告诉你这次调整的影响</div>';
         state.employees.forEach(function(name) {
             var current = getEmployeeShift(daySched, name, shifts);
+
+            // 如果有分析数据，显示此人当前状态标记
+            var statusTag = '';
+            if (state.analysisResult) {
+                var emp = state.analysisResult.employees[name];
+                if (emp && emp.issues.length > 0) {
+                    var worstLevel = emp.issues.some(function(i) { return i.level === 'danger'; }) ? 'danger' : 'warning';
+                    statusTag = '<span class="edit-status ' + worstLevel + '">' + emp.issues.length + '⚠</span>';
+                }
+            }
+
             html += '<div class="edit-row">';
-            html += '<span class="edit-name">' + name + '</span>';
+            html += '<span class="edit-name">' + name + statusTag + '</span>';
             html += '<select data-name="' + name + '">';
             shifts.forEach(function(s) {
                 var sel = s === current ? ' selected' : '';
@@ -399,22 +691,118 @@
         $modalBody.innerHTML = html;
         $modal.style.display = 'flex';
 
-        // 保存按钮
         $modalSave.onclick = function() {
+            // 执行修改
             $modalBody.querySelectorAll('select').forEach(function(sel) {
                 var empName = sel.getAttribute('data-name');
                 var newShift = sel.value;
                 state.scheduler.updateShift(dateStr, empName, newShift);
             });
+
+            // 重新分析（修改后对比）
+            var oldAnalysis = state.analysisResult;
             renderSchedule();
+            renderStats();
+            runAnalysis();
             closeModal();
-            showToast('已更新 ' + dateStr + ' 排班');
+
+            // 构建影响报告
+            showImpactReport(dateStr, oldAnalysis);
         };
     }
 
-    function closeModal() {
-        $modal.style.display = 'none';
+    // === 影响报告弹窗 ===
+    function showImpactReport(dateStr, oldAnalysis) {
+        if (!state.analysisResult || !oldAnalysis) {
+            showToast('已更新 ' + dateStr + ' 排班');
+            return;
+        }
+
+        var newR = state.analysisResult;
+        var changes = [];
+
+        state.employees.forEach(function(name) {
+            var oldEmp = oldAnalysis.employees[name];
+            var newEmp = newR.employees[name];
+            if (!oldEmp || !newEmp) return;
+
+            var diff = {
+                name: name,
+                scoreChange: newEmp.score - oldEmp.score,
+                oldScore: oldEmp.score,
+                newScore: newEmp.score,
+                restChange: newEmp.shiftCounts.rest - oldEmp.shiftCounts.rest,
+                newIssues: [],
+                resolvedIssues: []
+            };
+
+            // 找出新增问题
+            newEmp.issues.forEach(function(ni) {
+                var existed = oldEmp.issues.some(function(oi) { return oi.text === ni.text; });
+                if (!existed) diff.newIssues.push(ni);
+            });
+
+            // 找出解决的问题
+            oldEmp.issues.forEach(function(oi) {
+                var stillExists = newEmp.issues.some(function(ni) { return ni.text === oi.text; });
+                if (!stillExists) diff.resolvedIssues.push(oi);
+            });
+
+            if (diff.scoreChange !== 0 || diff.restChange !== 0 || diff.newIssues.length > 0 || diff.resolvedIssues.length > 0) {
+                changes.push(diff);
+            }
+        });
+
+        if (changes.length === 0) {
+            showToast('已更新 ' + dateStr + ' 排班（无显著影响）');
+            return;
+        }
+
+        // 渲染影响报告
+        var html = '<div class="impact-date">📅 调整日期：' + dateStr + '</div>';
+        html += '<div class="impact-list">';
+
+        changes.forEach(function(c) {
+            var scoreArrow = c.scoreChange > 0 ? '↑' : c.scoreChange < 0 ? '↓' : '→';
+            var scoreClass = c.scoreChange > 0 ? 'improved' : c.scoreChange < 0 ? 'worsened' : 'neutral';
+
+            html += '<div class="impact-person">';
+            html += '<div class="impact-name">' + c.name + '</div>';
+
+            // 幸福指数变化
+            html += '<div class="impact-score ' + scoreClass + '">';
+            html += '幸福指数 ' + c.oldScore + ' ' + scoreArrow + ' ' + c.newScore;
+            if (c.scoreChange !== 0) {
+                html += ' <span class="score-delta">(' + (c.scoreChange > 0 ? '+' : '') + c.scoreChange + ')</span>';
+            }
+            html += '</div>';
+
+            // 休息天数变化
+            if (c.restChange !== 0) {
+                var restIcon = c.restChange > 0 ? '😊 获得休息' : '😔 失去休息';
+                html += '<div class="impact-rest ' + (c.restChange > 0 ? 'gained' : 'lost') + '">' + restIcon + '（' + (c.restChange > 0 ? '+' : '') + c.restChange + '天）</div>';
+            }
+
+            // 新增问题
+            c.newIssues.forEach(function(issue) {
+                html += '<div class="impact-issue new">⚠️ 新增问题：' + issue.text + '</div>';
+            });
+
+            // 解决的问题
+            c.resolvedIssues.forEach(function(issue) {
+                html += '<div class="impact-issue resolved">✅ 已解决：' + issue.text + '</div>';
+            });
+
+            html += '</div>';
+        });
+
+        html += '</div>';
+        $modalImpactBody.innerHTML = html;
+        $modalImpact.style.display = 'flex';
     }
+
+    function closeModal() { $modal.style.display = 'none'; }
+    function closeImpactModal() { $modalImpact.style.display = 'none'; }
 
     // === 导出 ===
     function exportSchedule() {
@@ -427,7 +815,6 @@
         var dates = Object.keys(dateMeta).sort();
         var shifts = state.scheduler.SHIFTS;
 
-        // 生成 CSV
         var lines = [];
         var header = ['员工'];
         dates.forEach(function(d) {
@@ -446,14 +833,12 @@
             lines.push(row.join(','));
         });
 
-        var csv = '\uFEFF' + lines.join('\n'); // BOM 头确保 Excel 正确识别中文
+        var csv = '\uFEFF' + lines.join('\n');
         var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         var url = URL.createObjectURL(blob);
-
         var a = document.createElement('a');
         a.href = url;
-        var monthVal = $inputMonth.value || 'schedule';
-        a.download = '排班表_' + monthVal + '.csv';
+        a.download = '排班表_' + ($inputMonth.value || 'schedule') + '.csv';
         a.click();
         URL.revokeObjectURL(url);
         showToast('已导出 CSV 文件');
@@ -471,9 +856,7 @@
     function loadState() {
         try {
             var saved = localStorage.getItem('shift-scheduler-employees');
-            if (saved) {
-                state.employees = JSON.parse(saved);
-            }
+            if (saved) state.employees = JSON.parse(saved);
             var month = localStorage.getItem('shift-scheduler-month');
             if (month) $inputMonth.value = month;
             var fw = localStorage.getItem('shift-scheduler-firstWeek');
@@ -481,7 +864,7 @@
         } catch (e) {}
     }
 
-    // === Toast 提示 ===
+    // === Toast ===
     function showToast(msg) {
         var el = document.createElement('div');
         el.className = 'toast';
@@ -494,7 +877,5 @@
         }, 2500);
     }
 
-    // 启动
     init();
-
 })();
