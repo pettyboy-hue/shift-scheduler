@@ -11,7 +11,7 @@
         <header class="header">
             <div class="header-left">
                 <h1>📅 排班管理系统</h1>
-                <span class="subtitle">大小休 · 三班制 · 自动编排</span>
+                <span class="subtitle">大小休 · 三班制 · 智能分析</span>
             </div>
             <div class="header-right">
                 <button id="btn-export" class="btn btn-outline">📥 导出</button>
@@ -75,15 +75,55 @@
                         <p>2. <strong>24小时覆盖</strong>：公司任何时候都需要有人在岗，包括周末。</p>
                         <p>3. <strong>周末值班</strong>：双休周的周六日，从工作组中抽调人员值班，每班减半。</p>
                         <p>4. <strong>人性化排班</strong>：避免晚班后接早班；尽量让双休日连休；工时公平分配。</p>
-                        <p>5. <strong>手动微调</strong>：点击任意日期格子可手动修改排班。</p>
+                        <p>5. <strong>手动微调</strong>：点击任意日期格子可手动修改，系统会实时分析影响。</p>
                     </div>
                 </section>
             </aside>
             <div class="content">
+                <!-- 预警横幅 -->
+                <div id="warning-banner" class="warning-banner" style="display:none;"></div>
+
+                <!-- 健康分析面板 -->
+                <section class="panel analysis-panel" id="analysis-panel" style="display:none;">
+                    <div class="analysis-header">
+                        <h2>🩺 排班健康分析</h2>
+                        <div class="analysis-tabs">
+                            <button class="tab-btn active" data-tab="overview">总览</button>
+                            <button class="tab-btn" data-tab="weekly">每周详情</button>
+                            <button class="tab-btn" data-tab="fairness">公平性</button>
+                            <button class="tab-btn" data-tab="employees">个人报告</button>
+                        </div>
+                    </div>
+
+                    <!-- 总览标签页 -->
+                    <div class="tab-content active" id="tab-overview">
+                        <div id="suggestions-area" class="suggestions-area"></div>
+                        <div id="happiness-ranking" class="happiness-ranking"></div>
+                    </div>
+
+                    <!-- 每周详情标签页 -->
+                    <div class="tab-content" id="tab-weekly">
+                        <div id="weekly-rest-grid" class="weekly-rest-grid"></div>
+                    </div>
+
+                    <!-- 公平性标签页 -->
+                    <div class="tab-content" id="tab-fairness">
+                        <div id="fairness-dashboard" class="fairness-dashboard"></div>
+                    </div>
+
+                    <!-- 个人报告标签页 -->
+                    <div class="tab-content" id="tab-employees">
+                        <div id="employee-reports" class="employee-reports"></div>
+                    </div>
+                </section>
+
+                <!-- 统计面板 -->
                 <section class="panel stats-panel" id="stats-panel" style="display:none;">
                     <h2>📊 排班统计</h2>
                     <div class="stats-grid" id="stats-grid"></div>
                 </section>
+
+                <!-- 排班表 -->
                 <section class="panel">
                     <div class="schedule-header">
                         <h2>📋 排班表</h2>
@@ -102,6 +142,8 @@
             </div>
         </main>
     </div>
+
+    <!-- 编辑弹窗 -->
     <div id="modal-edit" class="modal" style="display:none;">
         <div class="modal-backdrop"></div>
         <div class="modal-content">
@@ -112,11 +154,28 @@
             <div class="modal-body" id="modal-body"></div>
             <div class="modal-footer">
                 <button id="modal-cancel" class="btn btn-outline">取消</button>
-                <button id="modal-save" class="btn btn-primary">保存</button>
+                <button id="modal-save" class="btn btn-primary">保存修改</button>
             </div>
         </div>
     </div>
+
+    <!-- 调整影响弹窗 -->
+    <div id="modal-impact" class="modal" style="display:none;">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📋 调整影响分析</h3>
+                <button class="modal-close" id="modal-impact-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-impact-body"></div>
+            <div class="modal-footer">
+                <button id="modal-impact-ok" class="btn btn-primary">知道了</button>
+            </div>
+        </div>
+    </div>
+
     <script src="scheduler.js"></script>
+    <script src="analyzer.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
