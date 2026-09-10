@@ -1,516 +1,467 @@
 /**
- * 排班核心算法 v4 - 工作日满员 + 仅双休日减半
+ * 排班核心算法 v5
  * 
- * 核心规则：
- * 1. 每个员工有固定班次（早/中/晚），永远不变
- * 2. 工作日（含小休周的周六）：所有班次必须满员
- *    - 早班 1人、中班 2人、晚班 2人
- * 3. 仅双休周（大休）的周六+周日才可以减半
- *    - 早班 0-1人、中班 1人、晚班 1人
- * 4. 晚班4人轮换：工作日每天必排2人，通过轮换保证每人公平
- * 5. 支持调休假、请假等特殊情况
- * 6. 早班只有1人（罗凯），工作日必排，双休日视业务可空
+ * 铁律：每个员工的班次永远不变！
+ * 罗凯=早班，陈力柳鹏=中班，袁继春罗浩文陈阳倩罗森鹏=晚班
+ * 排班只决定"今天来不来"，来了就上自己固定的班，绝不调到别的班次
+ *
+ * 大休（双休）：
+ *   - 周一~周五正常满员
+ *   - 周六周日班次减半，尽量让员工连休（周六+周日一起休）
+ *
+ * 小休（单休）：
+ *   - 周一~周五正常满员
+ *   - 同班次的人拆成两半：A组周六休，B组周日休
+ *   - 这样周六周日都有人上班，每人只休一天
+ *   - 周六周日班次各留一半人
  */
 
-var ShiftScheduler = (function() {
+var ShiftScheduler = (function () {
 
-    // 班次配置
-    var SHIFT_CONFIG = {
-        morning: { 
-            hours: 9, 
-            label: '早班', 
-            time: '09:00-18:00', 
-            // 工作日必须满员：1人
-            weekdayCount: 1, 
-            // 双休日减半：宽松时0人，正常时1人
-            weekendReducedCount: 1, 
-            lightWeekendCount: 0 
-        },
-        middle: { 
-            hours: 9, 
-            label: '中班', 
-            time: '16:00-01:00', 
-            weekdayCount: 2, 
-            weekendReducedCount: 1, 
-            lightWeekendCount: 1 
-        },
-        night: { 
-            hours: 8, 
-            label: '晚班', 
-            time: '21:00-05:00', 
-            weekdayCount: 2, 
-            weekendReducedCount: 1, 
-            lightWeekendCount: 1 
-        }
+    var SHIFTS = {
+        morning: { label: '早', fullLabel: '☀️ 早班', time: '09:00-18:00', hours: 9, weekdayNeed: 1 },
+        middle:  { label: '中', fullLabel: '🌤️ 中班', time: '16:00-次日01:00', hours: 9, weekdayNeed: 2 },
+        night:   { label: '晚', fullLabel: '🌙 晚班', time: '21:00-次日05:00', hours: 8, weekdayNeed: 2 }
     };
 
-    var DAY_NAMES = ['日','一','二','三','四','五','六'];
+    var DAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
-    function Scheduler(config) {
-        this.employees = config.employees || [];
-        this.weekStart = config.weekStart;
-        this.weekType = config.weekType || 'big'; // 'big'=双休 'small'=单休
-        this.busyness = config.busyness || 'normal';
-        // specials: { name: { type: 'leave'|'dayoff', days: ['YYYY-MM-DD',...] } }
-        this.specials = config.specials || {};
-        this.history = config.history || {};
-
-        this.schedule = {};
-        this.dates = [];
-        this.dateMeta = {};
+    function Scheduler(cfg) {
+        this.employees = cfg.employees || [];
+        this.weekStart = cfg.weekStart;
+        this.weekType = cfg.weekType || 'big';
+        this.bizLevel = cfg.bizLevel || 'normal';
+        this.specials = cfg.specials || {}; // { 姓名: { type:'leave'|'dayoff', days:['2025-01-06'] } }
     }
 
-    Scheduler.prototype.generate = function() {
+    /* ========== 生成 ========== */
+    Scheduler.prototype.generate = function () {
         this._buildDates();
-        this._assignShifts();
-        return {
-            schedule: this.schedule,
-            dates: this.dates,
-            dateMeta: this.dateMeta,
-            analysis: this._analyze()
-        };
+        this._buildGroups();
+        this.schedule = {}; // { 'YYYY-MM-DD': { morning:[], middle:[], night:[], rest:[] } }
+
+        for (var i = 0; i < 7; i++) {
+            var d = this.dates[i];
+            this.schedule[d] = { morning: [], middle: [], night: [], rest: [] };
+        }
+
+        if (this.weekType === 'big') {
+            this._assignBigWeek();
+        } else {
+            this._assignSmallWeek();
+        }
+
+        return { schedule: this.schedule, dates: this.dates, meta: this.meta, analysis: this.analyze() };
     };
 
-    Scheduler.prototype._buildDates = function() {
+    /* 构建日期数组 */
+    Scheduler.prototype._buildDates = function () {
+        this.dates = [];
+        this.meta = {};
         var start = new Date(this.weekStart + 'T00:00:00');
         for (var i = 0; i < 7; i++) {
             var d = new Date(start);
             d.setDate(d.getDate() + i);
-            var dateStr = _formatDate(d);
+            var s = fmt(d);
+            this.dates.push(s);
             var dow = d.getDay();
-
-            // 关键判断：这一天是否属于"可减半日"
-            // 只有大休周的周六(6)和周日(0)才是可减半日
-            var isReducedDay = false;
-            if (this.weekType === 'big' && (dow === 0 || dow === 6)) {
-                isReducedDay = true;
-            }
-
-            // 是否是休息日（用于分析，不影响排班人数逻辑）
-            var isRestDay = false;
-            if (this.weekType === 'big') {
-                isRestDay = (dow === 0 || dow === 6);
-            } else {
-                isRestDay = (dow === 0);
-            }
-
-            this.dates.push(dateStr);
-            this.dateMeta[dateStr] = {
-                date: dateStr,
-                dayOfWeek: dow,
-                dayName: DAY_NAMES[dow],
-                isWeekend: (dow === 0 || dow === 6),
-                isRestDay: isRestDay,
-                isReducedDay: isReducedDay, // 这一天班次人员是否减半
-                dayIndex: i
+            this.meta[s] = {
+                dow: dow,
+                dayName: DAYS[dow],
+                isWeekend: dow === 0 || dow === 6,
+                isSat: dow === 6,
+                isSun: dow === 0,
+                label: (d.getMonth() + 1) + '/' + d.getDate()
             };
         }
     };
 
-    Scheduler.prototype._assignShifts = function() {
+    /* 按班次分组 */
+    Scheduler.prototype._buildGroups = function () {
+        this.groups = { morning: [], middle: [], night: [] };
         var self = this;
-        
-        // 按班次分组
-        var groups = { morning: [], middle: [], night: [] };
-        this.employees.forEach(function(emp) {
-            if (groups[emp.shift]) {
-                groups[emp.shift].push(emp.name);
-            }
-        });
-
-        // 逐天排班
-        this.dates.forEach(function(dateStr) {
-            var meta = self.dateMeta[dateStr];
-            var daySchedule = { morning: [], middle: [], night: [], rest: [] };
-
-            ['morning', 'middle', 'night'].forEach(function(shift) {
-                var conf = SHIFT_CONFIG[shift];
-                var pool = groups[shift].slice();
-
-                // 排除今天请假/调休的人
-                pool = pool.filter(function(name) {
-                    var sp = self.specials[name];
-                    if (!sp) return true;
-                    if (sp.days && sp.days.indexOf(dateStr) >= 0) return false;
-                    return true;
-                });
-
-                // 确定今天需要几人——核心逻辑
-                var needed;
-                if (meta.isReducedDay) {
-                    // 只有大休周的周六周日才减半
-                    if (self.busyness === 'light' && shift === 'morning') {
-                        // 宽松 + 白班 → 周末可以不排人
-                        needed = conf.lightWeekendCount;
-                    } else if (self.busyness === 'busy') {
-                        // 繁忙时即使双休日也满员
-                        needed = conf.weekdayCount;
-                    } else {
-                        // 正常情况下双休日减半
-                        needed = conf.weekendReducedCount;
-                    }
-                } else {
-                    // 工作日（含小休周的周六）→ 必须满员
-                    needed = conf.weekdayCount;
-                }
-
-                // 不能超过可用人数
-                needed = Math.min(needed, pool.length);
-
-                // 选人
-                var selected = self._selectWorkers(pool, needed, shift, dateStr, meta);
-                daySchedule[shift] = selected;
-            });
-
-            // 剩余的人今天休息
-            var allWorking = {};
-            ['morning', 'middle', 'night'].forEach(function(s) {
-                daySchedule[s].forEach(function(n) { allWorking[n] = true; });
-            });
-            self.employees.forEach(function(emp) {
-                if (!allWorking[emp.name]) {
-                    daySchedule.rest.push(emp.name);
-                }
-            });
-
-            self.schedule[dateStr] = daySchedule;
+        this.employees.forEach(function (e) {
+            if (self.groups[e.shift]) self.groups[e.shift].push(e.name);
         });
     };
 
-    /**
-     * 从候选人中选出 count 人上班
-     * 
-     * 评分越低越优先上班（让疲劳的人多休息）
-     * 关键规则：
-     * - 工作日必须满员，所以评分只影响"谁上"而不影响"上几个"
-     * - 晚班4人每天选2人，评分决定轮换顺序
-     * - 连续工作天数过多 → 加分（让他休息）
-     * - 本周已工作天数多 → 加分（保证周内公平）
-     * - 历史周末值班多 → 在周末时加分
+    /* 判断某人某天是否有特殊情况（请假/调休）*/
+    Scheduler.prototype._isSpecialOff = function (name, dateStr) {
+        var sp = this.specials[name];
+        if (!sp || !sp.days) return false;
+        return sp.days.indexOf(dateStr) >= 0;
+    };
+
+    /* ===== 大休周（双休）===== 
+     * 周一~周五：满员
+     * 周六+周日：减半值班，尽量让同一批人连休
+     *
+     * 早班(1人)：罗凯周六周日看业务，宽松都不排，正常排1天
+     * 中班(2人)：周末1人值班，另1人连休 → 两人轮换
+     * 晚班(4人)：工作日每天2人，周末1人
+     *   - 先确定周末谁值班（1人），剩下3人连休
+     *   - 工作日5天每天需要2人，4人轮换确保每人至少休1天
      */
-    Scheduler.prototype._selectWorkers = function(pool, count, shift, dateStr, meta) {
-        if (count === 0 || pool.length === 0) return [];
-        // 如果需要的人数≥可用人数，全部上班
-        if (count >= pool.length) return pool.slice();
-
+    Scheduler.prototype._assignBigWeek = function () {
         var self = this;
+        var weekdays = this.dates.slice(0, 5); // 周一~周五
+        var sat = this.dates[5];
+        var sun = this.dates[6];
 
-        var scored = pool.map(function(name) {
-            var score = 0;
-            var hist = self.history[name] || { totalWork: 0, weekendDuty: 0, totalRest: 0 };
-
-            // 本周已连续工作了几天
-            var consecutiveWork = 0;
-            for (var i = self.dates.indexOf(dateStr) - 1; i >= 0; i--) {
-                var prevDate = self.dates[i];
-                var prevSched = self.schedule[prevDate];
-                if (prevSched && prevSched.rest.indexOf(name) >= 0) break;
-                consecutiveWork++;
+        /* --- 早班 --- */
+        var morningPerson = this.groups.morning[0]; // 罗凯
+        if (morningPerson) {
+            // 工作日都上
+            weekdays.forEach(function (d) {
+                if (!self._isSpecialOff(morningPerson, d)) {
+                    self.schedule[d].morning.push(morningPerson);
+                }
+            });
+            // 周末：宽松不排，正常/繁忙排
+            if (this.bizLevel !== 'light') {
+                // 大休周末也给罗凯安排一天？不，双休就让他休
+                // 但如果繁忙就两天都排
+                if (this.bizLevel === 'busy') {
+                    if (!self._isSpecialOff(morningPerson, sat)) self.schedule[sat].morning.push(morningPerson);
+                    if (!self._isSpecialOff(morningPerson, sun)) self.schedule[sun].morning.push(morningPerson);
+                }
+                // 正常情况大休周末白班不排人（只有1个人，让他双休）
             }
+        }
 
-            // 连续工作越多，越应该让他休息（分高=靠后=休息）
-            if (consecutiveWork >= 6) score += 1000;  // 绝对不能再排了
-            else if (consecutiveWork >= 5) score += 500;
-            else if (consecutiveWork >= 4) score += 200;
-            else if (consecutiveWork >= 3) score += 80;
-            else score += consecutiveWork * 15;
-
-            // 本周已工作天数越多，分越高
-            var thisWeekWork = 0;
-            for (var j = 0; j < self.dates.indexOf(dateStr); j++) {
-                var prev = self.dates[j];
-                var ps = self.schedule[prev];
-                if (ps && ps.rest.indexOf(name) < 0) thisWeekWork++;
-            }
-            score += thisWeekWork * 25;
-
-            // 历史总工作天数
-            score += (hist.totalWork || 0) * 3;
-
-            // 如果是周末，历史周末值班多的人分高
-            if (meta.isWeekend) {
-                score += (hist.weekendDuty || 0) * 40;
-            }
-
-            // 微量随机扰动防止每次结果完全相同
-            score += Math.random() * 3;
-
-            return { name: name, score: score };
+        /* --- 中班 --- */
+        var midPool = this.groups.middle.slice();
+        // 工作日全部上
+        weekdays.forEach(function (d) {
+            midPool.forEach(function (name) {
+                if (!self._isSpecialOff(name, d)) {
+                    self.schedule[d].middle.push(name);
+                }
+            });
         });
+        // 周末：1人值班1人休。让A值周六+周日，B连休（或反过来交替）
+        // 这里用评分选值班人（谁历史周末值班少谁来）
+        var midWeekendWorker = this._pickLeastBusy(midPool, 'weekendDuty');
+        if (midWeekendWorker && !self._isSpecialOff(midWeekendWorker, sat)) {
+            self.schedule[sat].middle.push(midWeekendWorker);
+        }
+        if (midWeekendWorker && !self._isSpecialOff(midWeekendWorker, sun)) {
+            self.schedule[sun].middle.push(midWeekendWorker);
+        }
 
-        // 分数低的优先上班
-        scored.sort(function(a, b) { return a.score - b.score; });
-        return scored.slice(0, count).map(function(s) { return s.name; });
+        /* --- 晚班 --- */
+        var nightPool = this.groups.night.slice();
+        // 先确定周末值班人（1人同时值周六+周日，保证其他3人连休）
+        var nightWeekendWorker = this._pickLeastBusy(nightPool, 'weekendDuty');
+        if (nightWeekendWorker && !self._isSpecialOff(nightWeekendWorker, sat)) {
+            self.schedule[sat].night.push(nightWeekendWorker);
+        }
+        if (nightWeekendWorker && !self._isSpecialOff(nightWeekendWorker, sun)) {
+            self.schedule[sun].night.push(nightWeekendWorker);
+        }
+
+        // 工作日：每天需要2人，4人轮换
+        // 周末值班那人工作日也要排，但要保证他总工作天数不会太多
+        // 策略：给4人打分排序，每天选最该上班的2人
+        this._assignNightWeekdays(nightPool, weekdays);
+
+        // 最后：没被排到的人当天都进rest
+        this.dates.forEach(function (d) {
+            var working = {};
+            ['morning', 'middle', 'night'].forEach(function (s) {
+                self.schedule[d][s].forEach(function (n) { working[n] = true; });
+            });
+            self.employees.forEach(function (e) {
+                if (!working[e.name]) {
+                    self.schedule[d].rest.push(e.name);
+                }
+            });
+        });
     };
 
-    // 分析排班结果
-    Scheduler.prototype._analyze = function() {
+    /* ===== 小休周（单休）=====
+     * 核心：同班次拆成两半，A组周六休，B组周日休
+     * 这样周六周日都有人，每人休1天
+     *
+     * 早班(1人)：只有罗凯，周六周日选一天休（默认周日休）
+     * 中班(2人)：陈力周六休+周日上，柳鹏周六上+周日休
+     * 晚班(4人)：4人分AB两组
+     *   - A组(2人)周六休，周日上
+     *   - B组(2人)周日休，周六上
+     *   - 工作日每天仍然2人轮换
+     */
+    Scheduler.prototype._assignSmallWeek = function () {
+        var self = this;
+        var weekdays = this.dates.slice(0, 5);
+        var sat = this.dates[5];
+        var sun = this.dates[6];
+
+        /* --- 早班 --- */
+        var morningPerson = this.groups.morning[0];
+        if (morningPerson) {
+            // 工作日+周六都上，周日休
+            weekdays.forEach(function (d) {
+                if (!self._isSpecialOff(morningPerson, d)) {
+                    self.schedule[d].morning.push(morningPerson);
+                }
+            });
+            // 周六上班
+            if (!self._isSpecialOff(morningPerson, sat)) {
+                self.schedule[sat].morning.push(morningPerson);
+            }
+            // 周日休息（单休）
+        }
+
+        /* --- 中班拆半 --- */
+        var midPool = this.groups.middle.slice();
+        // 工作日全部上
+        weekdays.forEach(function (d) {
+            midPool.forEach(function (name) {
+                if (!self._isSpecialOff(name, d)) {
+                    self.schedule[d].middle.push(name);
+                }
+            });
+        });
+        // 拆半：第1人周六休周日上，第2人周六上周日休
+        if (midPool.length >= 2) {
+            var midA = midPool[0]; // 周六休
+            var midB = midPool[1]; // 周日休
+            // 周六：B上班
+            if (!self._isSpecialOff(midB, sat)) self.schedule[sat].middle.push(midB);
+            // 周日：A上班
+            if (!self._isSpecialOff(midA, sun)) self.schedule[sun].middle.push(midA);
+        } else if (midPool.length === 1) {
+            // 只有1人，周六上周日休
+            if (!self._isSpecialOff(midPool[0], sat)) self.schedule[sat].middle.push(midPool[0]);
+        }
+
+        /* --- 晚班拆半 --- */
+        var nightPool = this.groups.night.slice();
+        // 分成AB两组（各2人）
+        var half = Math.ceil(nightPool.length / 2);
+        var groupA = nightPool.slice(0, half);  // 周六休
+        var groupB = nightPool.slice(half);     // 周日休
+
+        // 工作日：4人中每天选2人轮换
+        this._assignNightWeekdays(nightPool, weekdays);
+
+        // 周六：B组上班（A组休）
+        groupB.forEach(function (name) {
+            if (!self._isSpecialOff(name, sat)) {
+                self.schedule[sat].night.push(name);
+            }
+        });
+        // 周日：A组上班（B组休）
+        groupA.forEach(function (name) {
+            if (!self._isSpecialOff(name, sun)) {
+                self.schedule[sun].night.push(name);
+            }
+        });
+
+        // rest
+        this.dates.forEach(function (d) {
+            var working = {};
+            ['morning', 'middle', 'night'].forEach(function (s) {
+                self.schedule[d][s].forEach(function (n) { working[n] = true; });
+            });
+            self.employees.forEach(function (e) {
+                if (!working[e.name]) {
+                    self.schedule[d].rest.push(e.name);
+                }
+            });
+        });
+    };
+
+    /* 晚班工作日轮换：4人每天选2人 */
+    Scheduler.prototype._assignNightWeekdays = function (pool, weekdays) {
+        var self = this;
+        // 记录每人本周已排几天（工作日部分）
+        var workCount = {};
+        pool.forEach(function (n) { workCount[n] = 0; });
+
+        weekdays.forEach(function (d) {
+            // 过滤掉请假的
+            var available = pool.filter(function (n) {
+                return !self._isSpecialOff(n, d);
+            });
+            var need = Math.min(SHIFTS.night.weekdayNeed, available.length);
+
+            // 按工作天数升序（少的优先上），天数相同则随机
+            available.sort(function (a, b) {
+                var diff = workCount[a] - workCount[b];
+                return diff !== 0 ? diff : Math.random() - 0.5;
+            });
+
+            var selected = available.slice(0, need);
+            selected.forEach(function (n) {
+                self.schedule[d].night.push(n);
+                workCount[n]++;
+            });
+        });
+    };
+
+    /* 选历史周末值班最少的人 */
+    Scheduler.prototype._pickLeastBusy = function (pool, metric) {
+        if (pool.length === 0) return null;
+        // 简单实现：目前没有跨周历史，随机选（后续可接入localStorage历史）
+        return pool[Math.floor(Math.random() * pool.length)];
+    };
+
+    /* ========== 手动修改 ========== */
+    Scheduler.prototype.updateDay = function (dateStr, empName, toStatus) {
+        var day = this.schedule[dateStr];
+        if (!day) return;
+        var emp = this.employees.find(function (e) { return e.name === empName; });
+        if (!emp) return;
+
+        // 先从所有列表中移除
+        ['morning', 'middle', 'night', 'rest'].forEach(function (k) {
+            var idx = day[k].indexOf(empName);
+            if (idx >= 0) day[k].splice(idx, 1);
+        });
+
+        // 放到目标位置（只能是自己的固定班次或rest）
+        if (toStatus === 'rest') {
+            day.rest.push(empName);
+        } else {
+            day[emp.shift].push(empName);
+        }
+    };
+
+    /* ========== 分析 ========== */
+    Scheduler.prototype.analyze = function () {
         var self = this;
         var result = {
-            perPerson: {},
+            persons: {},
             warnings: [],
-            suggestions: [],
-            summary: {},
-            shiftCoverage: {} // 每天各班次的满员情况
+            suggestions: []
         };
 
-        // 先检查每天各班次的覆盖情况
-        this.dates.forEach(function(dateStr) {
-            var meta = self.dateMeta[dateStr];
-            var daySched = self.schedule[dateStr];
-            var coverage = {};
-
-            ['morning', 'middle', 'night'].forEach(function(shift) {
-                var conf = SHIFT_CONFIG[shift];
-                var actual = daySched[shift].length;
-                var expected;
-
-                if (meta.isReducedDay) {
-                    if (self.busyness === 'light' && shift === 'morning') {
-                        expected = conf.lightWeekendCount;
-                    } else if (self.busyness === 'busy') {
-                        expected = conf.weekdayCount;
-                    } else {
-                        expected = conf.weekendReducedCount;
-                    }
-                } else {
-                    expected = conf.weekdayCount;
-                }
-
-                coverage[shift] = {
-                    actual: actual,
-                    expected: expected,
-                    isFull: actual >= expected,
-                    isShort: actual < expected
-                };
-
-                // 工作日人手不足预警
-                if (!meta.isReducedDay && actual < expected) {
-                    result.warnings.push(
-                        '🔴 ' + dateStr.slice(5) + '(周' + meta.dayName + ') ' + 
-                        conf.label + '人手不足：需要' + expected + '人，实际' + actual + '人'
-                    );
-                }
-            });
-
-            result.shiftCoverage[dateStr] = coverage;
-        });
-
-        // 每人分析
-        this.employees.forEach(function(emp) {
+        this.employees.forEach(function (emp) {
             var name = emp.name;
-            var data = {
+            var shift = emp.shift;
+            var info = {
                 name: name,
-                fixedShift: emp.shift,
-                fixedShiftLabel: SHIFT_CONFIG[emp.shift].label,
-                fixedShiftTime: SHIFT_CONFIG[emp.shift].time,
+                shift: shift,
+                shiftLabel: SHIFTS[shift].fullLabel,
+                shiftTime: SHIFTS[shift].time,
                 workDays: [],
                 restDays: [],
-                weekendDutyDays: [],
-                isDoubleRest: false,
-                isSingleRest: false,
-                isNoRest: false,
-                restType: '',
-                restLabel: '',
-                consecutiveWork: 0,
+                weekendWork: [],
+                maxConsecutive: 0,
                 totalHours: 0,
-                issues: [],
-                special: self.specials[name] || null
+                restType: '',   // double|single|split|none
+                restEmoji: '',
+                restText: '',
+                issues: []
             };
 
-            var consecutive = 0;
-            var maxConsec = 0;
-
-            self.dates.forEach(function(dateStr) {
-                var daySched = self.schedule[dateStr];
-                var meta = self.dateMeta[dateStr];
-                var isResting = daySched.rest.indexOf(name) >= 0;
-
-                if (isResting) {
-                    data.restDays.push(dateStr);
-                    if (consecutive > maxConsec) maxConsec = consecutive;
-                    consecutive = 0;
+            var consec = 0, maxC = 0;
+            self.dates.forEach(function (d) {
+                var isRest = self.schedule[d].rest.indexOf(name) >= 0;
+                if (isRest) {
+                    info.restDays.push(d);
+                    if (consec > maxC) maxC = consec;
+                    consec = 0;
                 } else {
-                    data.workDays.push(dateStr);
-                    consecutive++;
-                    if (meta.isWeekend) {
-                        data.weekendDutyDays.push(dateStr);
-                    }
+                    info.workDays.push(d);
+                    consec++;
+                    if (self.meta[d].isWeekend) info.weekendWork.push(d);
                 }
             });
-            if (consecutive > maxConsec) maxConsec = consecutive;
-            data.consecutiveWork = maxConsec;
-            data.totalHours = data.workDays.length * SHIFT_CONFIG[emp.shift].hours;
+            if (consec > maxC) maxC = consec;
+            info.maxConsecutive = maxC;
+            info.totalHours = info.workDays.length * SHIFTS[shift].hours;
 
-            // 休息类型分析
-            var restCount = data.restDays.length;
-            if (restCount === 0) {
-                data.isNoRest = true;
-                data.restType = 'none';
-                data.restLabel = '❌ 无休';
-                data.issues.push({ level: 'danger', text: '本周没有任何休息日！' });
-                result.warnings.push('🔴 ' + name + ' 本周没有休息日，请务必调整');
-            } else if (restCount === 1) {
-                data.isSingleRest = true;
-                data.restType = 'single';
-                data.restLabel = '🟡 单休';
+            // 判断休息类型
+            var rc = info.restDays.length;
+            if (rc === 0) {
+                info.restType = 'none';
+                info.restEmoji = '🔴';
+                info.restText = '无休';
+                info.issues.push({ lv: 'danger', msg: '本周没有任何休息！' });
+                result.warnings.push('🔴 ' + name + ' 本周无休，请务必调整！');
+            } else if (rc === 1) {
+                info.restType = 'single';
+                info.restEmoji = '🟡';
+                info.restText = '单休';
             } else {
-                // 检查是否连休
-                var sortedRest = data.restDays.slice().sort();
+                // 检查是否连续
+                var sorted = info.restDays.slice().sort();
                 var isConsec = true;
-                for (var i = 1; i < sortedRest.length; i++) {
-                    var diff = (new Date(sortedRest[i]) - new Date(sortedRest[i-1])) / 86400000;
-                    if (diff > 1) { isConsec = false; break; }
+                for (var i = 1; i < sorted.length; i++) {
+                    if ((new Date(sorted[i]) - new Date(sorted[i - 1])) / 86400000 > 1) {
+                        isConsec = false; break;
+                    }
                 }
-                if (restCount >= 2 && isConsec) {
-                    data.isDoubleRest = true;
-                    data.restType = 'double';
-                    data.restLabel = '🟢 连休' + restCount + '天';
+                if (isConsec) {
+                    info.restType = 'double';
+                    info.restEmoji = '🟢';
+                    info.restText = '连休' + rc + '天';
                 } else {
-                    data.restType = 'split';
-                    data.restLabel = '🟠 拆休' + restCount + '天';
-                    data.issues.push({ level: 'warning', text: '休息日不连续，建议调整为连休' });
+                    info.restType = 'split';
+                    info.restEmoji = '🟠';
+                    info.restText = '拆休' + rc + '天';
+                    info.issues.push({ lv: 'warn', msg: '休息日不连续，建议调成连休' });
                 }
             }
 
             // 连续工作预警
-            if (data.consecutiveWork >= 7) {
-                data.issues.push({ level: 'danger', text: '连续工作' + data.consecutiveWork + '天，严重超负荷！' });
-                result.warnings.push('🔴 ' + name + ' 连续工作' + data.consecutiveWork + '天！');
-            } else if (data.consecutiveWork >= 6) {
-                data.issues.push({ level: 'danger', text: '连续工作' + data.consecutiveWork + '天，请尽快安排休息' });
-                result.warnings.push('🔴 ' + name + ' 连续工作' + data.consecutiveWork + '天');
-            } else if (data.consecutiveWork >= 5) {
-                data.issues.push({ level: 'warning', text: '连续工作' + data.consecutiveWork + '天，较为辛苦' });
+            if (maxC >= 7) {
+                info.issues.push({ lv: 'danger', msg: '连续工作' + maxC + '天！严重超负荷' });
+                result.warnings.push('🔴 ' + name + ' 连续工作' + maxC + '天！');
+            } else if (maxC >= 6) {
+                info.issues.push({ lv: 'danger', msg: '连续工作' + maxC + '天，需要休息' });
+                result.warnings.push('⚠️ ' + name + ' 连续工作' + maxC + '天');
+            } else if (maxC >= 5) {
+                info.issues.push({ lv: 'warn', msg: '连续工作' + maxC + '天，较辛苦' });
             }
 
-            // 特殊情况标记
-            if (data.special) {
-                if (data.special.type === 'dayoff') {
-                    data.issues.push({ level: 'info', text: '本周使用调休假 ' + data.special.days.length + ' 天' });
-                } else if (data.special.type === 'leave') {
-                    data.issues.push({ level: 'info', text: '本周请假 ' + data.special.days.length + ' 天' });
-                }
-            }
-
-            result.perPerson[name] = data;
+            result.persons[name] = info;
         });
 
-        // 全局建议
-        var noRestPeople = [];
-        var splitRestPeople = [];
-        var heavyWorkers = []; // 本周工作≥6天的人
-        self.employees.forEach(function(emp) {
-            var d = result.perPerson[emp.name];
-            if (d.isNoRest) noRestPeople.push(emp.name);
-            if (d.restType === 'split') splitRestPeople.push(emp.name);
-            if (d.workDays.length >= 6) heavyWorkers.push({ name: emp.name, days: d.workDays.length });
-        });
-
-        if (noRestPeople.length > 0) {
-            result.suggestions.push({
-                icon: '🚨', text: noRestPeople.join('、') + ' 本周没有休息，必须安排至少1天休息'
-            });
-        }
-        if (splitRestPeople.length > 0) {
-            result.suggestions.push({
-                icon: '💡', text: splitRestPeople.join('、') + ' 的休息日被拆开了，建议调成连休'
-            });
-        }
-        if (heavyWorkers.length > 0) {
-            result.suggestions.push({
-                icon: '😓',
-                text: heavyWorkers.map(function(w) { return w.name + '(' + w.days + '天)'; }).join('、') + 
-                     ' 本周工作天数较多，建议下周适当补休'
-            });
-        }
-
-        // 晚班轮换公平性检查（4人组内对比）
-        var nightGroup = self.employees.filter(function(e) { return e.shift === 'night'; });
-        if (nightGroup.length > 2) {
-            var nightWork = nightGroup.map(function(e) { 
-                return { name: e.name, days: result.perPerson[e.name].workDays.length };
-            });
-            var maxWork = Math.max.apply(null, nightWork.map(function(w) { return w.days; }));
-            var minWork = Math.min.apply(null, nightWork.map(function(w) { return w.days; }));
-            if (maxWork - minWork >= 2) {
-                var maxP = nightWork.find(function(w) { return w.days === maxWork; });
-                var minP = nightWork.find(function(w) { return w.days === minWork; });
-                result.suggestions.push({
-                    icon: '⚖️',
-                    text: '晚班组工作不均：' + maxP.name + '上' + maxWork + '天、' + 
-                          minP.name + '上' + minWork + '天，差距' + (maxWork - minWork) + '天'
-                });
+        // 晚班公平性
+        var nightPpl = self.employees.filter(function (e) { return e.shift === 'night'; });
+        if (nightPpl.length > 2) {
+            var counts = nightPpl.map(function (e) { return { n: e.name, d: result.persons[e.name].workDays.length }; });
+            var max = Math.max.apply(null, counts.map(function (c) { return c.d; }));
+            var min = Math.min.apply(null, counts.map(function (c) { return c.d; }));
+            if (max - min >= 2) {
+                var most = counts.find(function (c) { return c.d === max; });
+                var least = counts.find(function (c) { return c.d === min; });
+                result.suggestions.push('⚖️ 晚班工作不均：' + most.n + '上' + max + '天，' + least.n + '上' + min + '天，建议微调');
             }
         }
 
-        // 周末值班公平性
-        ['middle', 'night'].forEach(function(shift) {
-            var group = self.employees.filter(function(e) { return e.shift === shift; });
-            if (group.length <= 1) return;
-            var duties = group.map(function(e) { 
-                return { name: e.name, count: result.perPerson[e.name].weekendDutyDays.length }; 
-            });
-            var maxD = Math.max.apply(null, duties.map(function(d) { return d.count; }));
-            var minD = Math.min.apply(null, duties.map(function(d) { return d.count; }));
-            if (maxD - minD >= 2) {
-                var maxN = duties.find(function(d) { return d.count === maxD; }).name;
-                var minN = duties.find(function(d) { return d.count === minD; }).name;
-                result.suggestions.push({
-                    icon: '⚖️',
-                    text: SHIFT_CONFIG[shift].label + '组周末值班不均：' + maxN + '值' + maxD + '天 vs ' + 
-                          minN + '值' + minD + '天'
-                });
-            }
+        // 无休建议
+        var noRest = [];
+        self.employees.forEach(function (e) {
+            if (result.persons[e.name].restType === 'none') noRest.push(e.name);
         });
+        if (noRest.length) {
+            result.suggestions.push('🚨 ' + noRest.join('、') + ' 本周无休，必须安排休息');
+        }
+
+        var splitRest = [];
+        self.employees.forEach(function (e) {
+            if (result.persons[e.name].restType === 'split') splitRest.push(e.name);
+        });
+        if (splitRest.length) {
+            result.suggestions.push('💡 ' + splitRest.join('、') + ' 休息日被拆开了，建议调成连休');
+        }
 
         if (result.warnings.length === 0 && result.suggestions.length === 0) {
-            result.suggestions.push({ icon: '✅', text: '本周排班合理，没有问题 👍' });
+            result.suggestions.push('✅ 本周排班合理，没有问题 👍');
         }
-
-        result.summary = {
-            totalEmployees: self.employees.length,
-            weekType: self.weekType === 'big' ? '大休周（双休）' : '小休周（单休）',
-            busyness: self.busyness === 'light' ? '宽松' : self.busyness === 'busy' ? '繁忙' : '正常',
-            dateRange: self.dates[0] + ' ~ ' + self.dates[6]
-        };
 
         return result;
     };
 
-    // 手动修改某天某人状态
-    Scheduler.prototype.updateDay = function(dateStr, empName, newStatus) {
-        var daySched = this.schedule[dateStr];
-        if (!daySched) return;
-
-        var emp = this.employees.find(function(e) { return e.name === empName; });
-        if (!emp) return;
-
-        ['morning', 'middle', 'night', 'rest'].forEach(function(key) {
-            var idx = daySched[key].indexOf(empName);
-            if (idx >= 0) daySched[key].splice(idx, 1);
-        });
-
-        if (newStatus === 'rest') {
-            daySched.rest.push(empName);
-        } else {
-            daySched[emp.shift].push(empName);
-        }
-    };
-
-    Scheduler.prototype.reAnalyze = function() {
-        return this._analyze();
-    };
-
-    function _formatDate(d) {
-        var y = d.getFullYear();
-        var m = String(d.getMonth() + 1).padStart(2, '0');
-        var day = String(d.getDate()).padStart(2, '0');
-        return y + '-' + m + '-' + day;
+    function fmt(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
 
-    Scheduler.SHIFT_CONFIG = SHIFT_CONFIG;
-    Scheduler.DAY_NAMES = DAY_NAMES;
-
+    Scheduler.SHIFTS = SHIFTS;
+    Scheduler.DAYS = DAYS;
     return Scheduler;
 })();
