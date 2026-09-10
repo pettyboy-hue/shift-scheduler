@@ -3,141 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>排班管理系统 - 大小休三班制</title>
+    <title>排班助手 - 固定班次智能调休</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app">
         <header class="header">
             <div class="header-left">
-                <h1>📅 排班管理系统</h1>
-                <span class="subtitle">大小休 · 三班制 · 智能分析</span>
+                <h1>📅 排班助手</h1>
+                <span class="subtitle">固定班次 · 智能调休 · 人性化分析</span>
             </div>
             <div class="header-right">
-                <button id="btn-export" class="btn btn-outline">📥 导出</button>
-                <button id="btn-save" class="btn btn-primary">💾 保存</button>
+                <button id="btn-export" class="btn btn-outline">📥 导出CSV</button>
             </div>
         </header>
+
         <main class="main">
+            <!-- 左侧面板 -->
             <aside class="sidebar">
+                <!-- 员工管理 -->
                 <section class="panel">
-                    <h2>👥 员工管理</h2>
-                    <div class="employee-input">
-                        <input type="text" id="input-employee" placeholder="输入员工姓名" />
-                        <button id="btn-add-employee" class="btn btn-sm btn-primary">添加</button>
+                    <h2>👥 员工与固定班次</h2>
+                    <div class="employee-add-row">
+                        <input type="text" id="input-emp-name" placeholder="姓名" />
+                        <select id="select-emp-shift">
+                            <option value="morning">☀️ 早班 09-18</option>
+                            <option value="middle">🌤️ 中班 16-01</option>
+                            <option value="night">🌙 晚班 21-05</option>
+                        </select>
+                        <button id="btn-add-emp" class="btn btn-sm btn-primary">添加</button>
                     </div>
-                    <div class="employee-list" id="employee-list">
-                        <p class="empty-hint">还没有员工，请添加</p>
-                    </div>
-                    <div class="quick-add">
-                        <button id="btn-demo-employees" class="btn btn-sm btn-outline">加载示例员工</button>
-                    </div>
+                    <div id="employee-list" class="employee-list"></div>
+                    <button id="btn-load-preset" class="btn btn-sm btn-outline" style="width:100%;margin-top:8px;">
+                        📋 加载公司现有人员
+                    </button>
                 </section>
+
+                <!-- 周排班配置 -->
                 <section class="panel">
-                    <h2>⚙️ 排班配置</h2>
+                    <h2>📆 排班设置</h2>
                     <div class="config-group">
-                        <label>排班月份</label>
-                        <input type="month" id="input-month" />
+                        <label>选择起始日期（周一）</label>
+                        <input type="date" id="input-week-start" />
                     </div>
                     <div class="config-group">
-                        <label>第一周类型</label>
-                        <select id="select-first-week">
-                            <option value="big">大休（双休）</option>
-                            <option value="small">小休（单休）</option>
+                        <label>本周类型</label>
+                        <select id="select-week-type">
+                            <option value="big">大休周（双休：周六+周日）</option>
+                            <option value="small">小休周（单休：仅周日）</option>
                         </select>
                     </div>
                     <div class="config-group">
-                        <label>工作日每班人数</label>
-                        <input type="number" id="input-weekday-count" value="2" min="1" max="10" />
+                        <label>业务松紧度</label>
+                        <select id="select-busyness">
+                            <option value="normal">正常</option>
+                            <option value="light">宽松（周末白班可空）</option>
+                            <option value="busy">繁忙（周末不减人）</option>
+                        </select>
                     </div>
-                    <div class="config-group">
-                        <label>休息日每班人数</label>
-                        <input type="number" id="input-weekend-count" value="1" min="1" max="10" />
+
+                    <div class="config-section">
+                        <h3>🏖️ 特殊情况</h3>
+                        <div id="special-list" class="special-list">
+                            <!-- 动态生成：每人一行，可勾选调休/请假 -->
+                        </div>
                     </div>
-                    <div class="config-group">
-                        <label><input type="checkbox" id="check-night-shift" checked /> 启用晚班</label>
-                    </div>
-                    <button id="btn-generate" class="btn btn-primary btn-block">🚀 生成排班表</button>
+
+                    <button id="btn-generate" class="btn btn-primary btn-block">🚀 生成本周排班</button>
                 </section>
+
+                <!-- 班次说明 -->
                 <section class="panel">
                     <h2>🕐 班次说明</h2>
                     <div class="shift-legend">
-                        <div class="shift-item"><span class="shift-badge morning">早</span><span>09:00 - 18:00</span></div>
-                        <div class="shift-item"><span class="shift-badge middle">中</span><span>16:00 - 次日01:00</span></div>
-                        <div class="shift-item"><span class="shift-badge night">晚</span><span>21:00 - 次日05:00</span></div>
-                        <div class="shift-item"><span class="shift-badge rest">休</span><span>休息</span></div>
-                    </div>
-                </section>
-                <section class="panel">
-                    <h2>📖 排班规则</h2>
-                    <div class="rules-text">
-                        <p>1. <strong>大小休轮换</strong>：一周双休，下一周单休，交替进行。</p>
-                        <p>2. <strong>24小时覆盖</strong>：公司任何时候都需要有人在岗，包括周末。</p>
-                        <p>3. <strong>周末值班</strong>：双休周的周六日，从工作组中抽调人员值班，每班减半。</p>
-                        <p>4. <strong>人性化排班</strong>：避免晚班后接早班；尽量让双休日连休；工时公平分配。</p>
-                        <p>5. <strong>手动微调</strong>：点击任意日期格子可手动修改，系统会实时分析影响。</p>
+                        <div class="shift-item"><span class="shift-dot morning"></span><span>☀️ 早班 09:00 - 18:00（工作日1人，周末视业务0-1人）</span></div>
+                        <div class="shift-item"><span class="shift-dot middle"></span><span>🌤️ 中班 16:00 - 次日01:00（工作日2人，周末1人）</span></div>
+                        <div class="shift-item"><span class="shift-dot night"></span><span>🌙 晚班 21:00 - 次日05:00（4人轮换，每天2人，周末1人）</span></div>
                     </div>
                 </section>
             </aside>
+
+            <!-- 右侧主区域 -->
             <div class="content">
                 <!-- 预警横幅 -->
                 <div id="warning-banner" class="warning-banner" style="display:none;"></div>
 
-                <!-- 健康分析面板 -->
-                <section class="panel analysis-panel" id="analysis-panel" style="display:none;">
-                    <div class="analysis-header">
-                        <h2>🩺 排班健康分析</h2>
-                        <div class="analysis-tabs">
-                            <button class="tab-btn active" data-tab="overview">总览</button>
-                            <button class="tab-btn" data-tab="weekly">每周详情</button>
-                            <button class="tab-btn" data-tab="fairness">公平性</button>
-                            <button class="tab-btn" data-tab="employees">个人报告</button>
-                        </div>
-                    </div>
-
-                    <!-- 总览标签页 -->
-                    <div class="tab-content active" id="tab-overview">
-                        <div id="suggestions-area" class="suggestions-area"></div>
-                        <div id="happiness-ranking" class="happiness-ranking"></div>
-                    </div>
-
-                    <!-- 每周详情标签页 -->
-                    <div class="tab-content" id="tab-weekly">
-                        <div id="weekly-rest-grid" class="weekly-rest-grid"></div>
-                    </div>
-
-                    <!-- 公平性标签页 -->
-                    <div class="tab-content" id="tab-fairness">
-                        <div id="fairness-dashboard" class="fairness-dashboard"></div>
-                    </div>
-
-                    <!-- 个人报告标签页 -->
-                    <div class="tab-content" id="tab-employees">
-                        <div id="employee-reports" class="employee-reports"></div>
-                    </div>
-                </section>
-
-                <!-- 统计面板 -->
-                <section class="panel stats-panel" id="stats-panel" style="display:none;">
-                    <h2>📊 排班统计</h2>
-                    <div class="stats-grid" id="stats-grid"></div>
-                </section>
-
-                <!-- 排班表 -->
-                <section class="panel">
+                <!-- 排班结果 -->
+                <section class="panel" id="schedule-panel">
                     <div class="schedule-header">
-                        <h2>📋 排班表</h2>
-                        <div class="schedule-actions">
-                            <button id="btn-view-calendar" class="btn btn-sm btn-outline active">日历视图</button>
-                            <button id="btn-view-list" class="btn btn-sm btn-outline">列表视图</button>
+                        <h2 id="schedule-title">📋 排班表</h2>
+                        <div class="view-toggle">
+                            <button class="btn btn-sm btn-outline active" id="btn-view-week">周视图</button>
+                            <button class="btn btn-sm btn-outline" id="btn-view-person">人员视图</button>
                         </div>
                     </div>
                     <div id="schedule-container" class="schedule-container">
                         <div class="empty-schedule">
                             <div class="empty-icon">📅</div>
-                            <p>请先添加员工并点击「生成排班表」</p>
+                            <p>请先设置员工和日期，然后点击「生成本周排班」</p>
                         </div>
                     </div>
+                </section>
+
+                <!-- 分析面板 -->
+                <section class="panel" id="analysis-panel" style="display:none;">
+                    <div class="analysis-header">
+                        <h2>🩺 排班分析</h2>
+                        <div class="analysis-tabs">
+                            <button class="tab-btn active" data-tab="overview">总览与建议</button>
+                            <button class="tab-btn" data-tab="weekly">休息详情</button>
+                            <button class="tab-btn" data-tab="person">个人报告</button>
+                        </div>
+                    </div>
+                    <div class="tab-content active" id="tab-overview"></div>
+                    <div class="tab-content" id="tab-weekly"></div>
+                    <div class="tab-content" id="tab-person"></div>
                 </section>
             </div>
         </main>
