@@ -1,319 +1,419 @@
 /**
- * 排班核心算法
+ * 排班核心算法 v3 - 固定班次 + 智能调休
  * 
- * 设计思路：
- * 1. 先确定每天的类型（工作日/大休日/小休日）
- * 2. 把员工分成 A/B 两组，交替执行大小休
- * 3. 大休周的周六日：休息组休息，但需要安排值班人员覆盖
- * 4. 人性化保障：避免晚班后接早班，工时公平分配，双休日连休
+ * 核心思路：
+ * 1. 每个员工有固定班次（早/中/晚），不会改变
+ * 2. 算法只决定每天谁上班、谁休息
+ * 3. 晚班4人轮换：每天排2人，保证公平
+ * 4. 白班工作日1人固定上，周末视业务可0人
+ * 5. 中班工作日2人，周末1人
+ * 6. 支持调休假、请假等特殊情况
  */
 
 var ShiftScheduler = (function() {
 
-    function ShiftScheduler(config) {
+    // 班次配置：工时、工作日人数、周末人数
+    var SHIFT_CONFIG = {
+        morning: { hours: 9, label: '早班', time: '09:00-18:00', weekdayCount: 1, weekendCount: 1, lightWeekendCount: 0 },
+        middle:  { hours: 9, label: '中班', time: '16:00-01:00', weekdayCount: 2, weekendCount: 1, lightWeekendCount: 1 },
+        night:   { hours: 8, label: '晚班', time: '21:00-05:00', weekdayCount: 2, weekendCount: 1, lightWeekendCount: 1 }
+    };
+
+    var DAY_NAMES = ['日','一','二','三','四','五','六'];
+
+    function Scheduler(config) {
+        // employees: [{ name, shift }] — shift 是固定班次
         this.employees = config.employees || [];
-        this.year = config.year;
-        this.month = config.month; // 1-12
-        this.firstWeekType = config.firstWeekType || 'big';
-        this.weekdayPerShift = config.weekdayPerShift || 2;
-        this.weekendPerShift = config.weekendPerShift || 1;
-        this.enableNightShift = config.enableNightShift !== false;
+        this.weekStart = config.weekStart; // 'YYYY-MM-DD' 周一日期
+        this.weekType = config.weekType || 'big'; // 'big'=双休 'small'=单休
+        this.busyness = config.busyness || 'normal'; // 'light'/'normal'/'busy'
+        // specials: { name: { type: 'leave'|'dayoff', days: ['YYYY-MM-DD',...] } }
+        this.specials = config.specials || {};
+        // 历史数据：用于跨周公平性，{ name: { weekendDuty: N, totalWork: N, totalRest: N } }
+        this.history = config.history || {};
 
-        this.SHIFTS = ['morning', 'middle'];
-        if (this.enableNightShift) {
-            this.SHIFTS.push('night');
-        }
-
-        this.schedule = {};
+        this.schedule = {}; // dateStr -> { morning: [], middle: [], night: [], rest: [] }
+        this.dates = [];
         this.dateMeta = {};
-        this.stats = {};
-        this.groupA = [];
-        this.groupB = [];
     }
 
-    // 主入口
-    ShiftScheduler.prototype.generate = function() {
-        var minNeeded = this.weekdayPerShift * this.SHIFTS.length;
-        if (this.employees.length < minNeeded) {
-            throw new Error(
-                '员工人数不足！至少需要 ' + minNeeded + ' 人' +
-                '（' + this.SHIFTS.length + '个班次 x 每班' + this.weekdayPerShift + '人），' +
-                '当前只有 ' + this.employees.length + ' 人'
-            );
-        }
-
-        this._buildDateMeta();
-        this._assignGroups();
-        this._generateSchedule();
-        return this.schedule;
+    // 生成一周排班（周一到周日，7天）
+    Scheduler.prototype.generate = function() {
+        this._buildDates();
+        this._assignShifts();
+        return {
+            schedule: this.schedule,
+            dates: this.dates,
+            dateMeta: this.dateMeta,
+            analysis: this._analyze()
+        };
     };
 
-    // 构建日期元数据：确定每天属于哪一周、大休还是小休、是否休息日
-    ShiftScheduler.prototype._buildDateMeta = function() {
-        var daysInMonth = new Date(this.year, this.month, 0).getDate();
-        var currentWeekIndex = 0;
-        var currentWeekType = this.firstWeekType;
+    // 构建7天日期元数据
+    Scheduler.prototype._buildDates = function() {
+        var start = new Date(this.weekStart + 'T00:00:00');
+        // 确保从周一开始
+        for (var i = 0; i < 7; i++) {
+            var d = new Date(start);
+            d.setDate(d.getDate() + i);
+            var dateStr = _formatDate(d);
+            var dow = d.getDay(); // 0=周日
+            var isWeekend = dow === 0 || dow === 6;
 
-        for (var d = 1; d <= daysInMonth; d++) {
-            var date = new Date(this.year, this.month - 1, d);
-            var dayOfWeek = date.getDay(); // 0=周日
-            var dateStr = this._formatDate(date);
-
-            // 周一开始新一周
-            if (dayOfWeek === 1 && d > 1) {
-                currentWeekIndex++;
-                currentWeekType = currentWeekType === 'big' ? 'small' : 'big';
-            }
-
-            var isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-            var isRest = false;
-
-            if (currentWeekType === 'big') {
-                // 大休周：周六+周日都休
-                isRest = isWeekend;
+            // 判断这天是否休息日
+            var isRestDay = false;
+            if (this.weekType === 'big') {
+                // 大休周：周六+周日都是休息日
+                isRestDay = isWeekend;
             } else {
-                // 小休周：只有周日休
-                isRest = dayOfWeek === 0;
+                // 小休周：仅周日
+                isRestDay = dow === 0;
             }
 
+            this.dates.push(dateStr);
             this.dateMeta[dateStr] = {
                 date: dateStr,
-                dayOfWeek: dayOfWeek,
-                weekIndex: currentWeekIndex,
-                weekType: currentWeekType,
-                isRest: isRest,
+                dayOfWeek: dow,
+                dayName: DAY_NAMES[dow],
                 isWeekend: isWeekend,
-                dayNum: d
+                isRestDay: isRestDay,
+                dayIndex: i
             };
         }
     };
 
-    // 分组：A/B 两组交替大小休
-    ShiftScheduler.prototype._assignGroups = function() {
-        var half = Math.ceil(this.employees.length / 2);
-        this.groupA = this.employees.slice(0, half);
-        this.groupB = this.employees.slice(half);
-    };
-
-    // 逐天生成排班
-    ShiftScheduler.prototype._generateSchedule = function() {
+    // 核心排班逻辑
+    Scheduler.prototype._assignShifts = function() {
         var self = this;
-        var dates = Object.keys(this.dateMeta).sort();
-
-        // 初始化统计
-        var stats = {};
+        
+        // 按班次分组
+        var groups = { morning: [], middle: [], night: [] };
         this.employees.forEach(function(emp) {
-            stats[emp] = {
-                morning: 0, middle: 0, night: 0,
-                rest: 0, weekendDuty: 0, totalWork: 0,
-                lastShift: null,
-                consecutiveWork: 0
-            };
+            if (groups[emp.shift]) {
+                groups[emp.shift].push(emp.name);
+            }
         });
 
-        dates.forEach(function(dateStr) {
+        // 每天逐日排
+        this.dates.forEach(function(dateStr) {
             var meta = self.dateMeta[dateStr];
-            var daySchedule = { morning: [], middle: [], rest: [] };
-            if (self.enableNightShift) {
-                daySchedule.night = [];
-            }
+            var daySchedule = { morning: [], middle: [], night: [], rest: [] };
 
-            var perShift = meta.isRest ? self.weekendPerShift : self.weekdayPerShift;
+            // 对每个班次，决定今天需要几人、排谁
+            ['morning', 'middle', 'night'].forEach(function(shift) {
+                var conf = SHIFT_CONFIG[shift];
+                var pool = groups[shift].slice(); // 候选人
 
-            // 确定 A/B 组本周类型
-            var groupAType, groupBType;
-            if (meta.weekIndex % 2 === 0) {
-                groupAType = self.firstWeekType;
-                groupBType = self.firstWeekType === 'big' ? 'small' : 'big';
-            } else {
-                groupBType = self.firstWeekType;
-                groupAType = self.firstWeekType === 'big' ? 'small' : 'big';
-            }
-
-            // 判断哪组今天休息
-            var restGroupMembers = [];
-            var workGroupMembers = [];
-
-            if (self._shouldGroupRest(groupAType, meta)) {
-                restGroupMembers = restGroupMembers.concat(self.groupA);
-            } else {
-                workGroupMembers = workGroupMembers.concat(self.groupA);
-            }
-
-            if (self._shouldGroupRest(groupBType, meta)) {
-                restGroupMembers = restGroupMembers.concat(self.groupB);
-            } else {
-                workGroupMembers = workGroupMembers.concat(self.groupB);
-            }
-
-            if (meta.isRest) {
-                // === 休息日：需要安排值班 ===
-                var available = workGroupMembers.slice();
-                var restPool = restGroupMembers.slice().sort(function(a, b) {
-                    return stats[a].weekendDuty - stats[b].weekendDuty;
+                // 排除今天请假/调休的人
+                pool = pool.filter(function(name) {
+                    var sp = self.specials[name];
+                    if (!sp) return true;
+                    if (sp.days && sp.days.indexOf(dateStr) >= 0) return false;
+                    return true;
                 });
 
-                self.SHIFTS.forEach(function(shift) {
-                    var needed = perShift;
-                    var assigned = self._pickBest(available, needed, shift, stats);
-
-                    // 从可用池移除已分配的人
-                    assigned.forEach(function(name) {
-                        var idx = available.indexOf(name);
-                        if (idx >= 0) available.splice(idx, 1);
-                    });
-
-                    // 工作组不够时，从休息组补充
-                    if (assigned.length < needed) {
-                        var extraNeeded = needed - assigned.length;
-                        var extra = self._pickBest(restPool, extraNeeded, shift, stats);
-                        assigned = assigned.concat(extra);
-                        extra.forEach(function(name) {
-                            var idx = restPool.indexOf(name);
-                            if (idx >= 0) restPool.splice(idx, 1);
-                            stats[name].weekendDuty++;
-                        });
+                // 确定今天需要几人
+                var needed;
+                if (meta.isRestDay) {
+                    // 休息日减半
+                    if (self.busyness === 'light' && shift === 'morning') {
+                        // 宽松时白班周末不排人
+                        needed = 0;
+                    } else if (self.busyness === 'busy') {
+                        // 繁忙时周末不减人
+                        needed = conf.weekdayCount;
+                    } else {
+                        needed = conf.weekendCount;
                     }
+                } else if (meta.isWeekend && !meta.isRestDay) {
+                    // 小休周的周六：属于工作日但是周末，可以适当减
+                    if (self.busyness === 'light' && shift === 'morning') {
+                        needed = 0;
+                    } else {
+                        needed = conf.weekendCount;
+                    }
+                } else {
+                    // 工作日
+                    needed = conf.weekdayCount;
+                }
 
-                    daySchedule[shift] = assigned;
-                });
+                // needed 不能超过可用人数
+                needed = Math.min(needed, pool.length);
 
-                // 未被分配的人休息
-                var allAssigned = {};
-                self.SHIFTS.forEach(function(s) {
-                    (daySchedule[s] || []).forEach(function(n) { allAssigned[n] = true; });
-                });
-                daySchedule.rest = self.employees.filter(function(e) { return !allAssigned[e]; });
-
-            } else {
-                // === 工作日 ===
-                var allAvailable = self.employees.slice();
-
-                self.SHIFTS.forEach(function(shift) {
-                    var needed = perShift;
-                    var assigned = self._pickBest(allAvailable, needed, shift, stats);
-                    daySchedule[shift] = assigned;
-                    assigned.forEach(function(name) {
-                        var idx = allAvailable.indexOf(name);
-                        if (idx >= 0) allAvailable.splice(idx, 1);
-                    });
-                });
-
-                daySchedule.rest = allAvailable;
-            }
-
-            // 更新统计
-            self.SHIFTS.forEach(function(shift) {
-                (daySchedule[shift] || []).forEach(function(name) {
-                    stats[name][shift]++;
-                    stats[name].totalWork++;
-                    stats[name].lastShift = shift;
-                    stats[name].consecutiveWork++;
-                });
+                // 选人：基于公平性评分
+                var selected = self._selectWorkers(pool, needed, shift, dateStr, meta);
+                daySchedule[shift] = selected;
             });
-            (daySchedule.rest || []).forEach(function(name) {
-                stats[name].rest++;
-                stats[name].lastShift = 'rest';
-                stats[name].consecutiveWork = 0;
+
+            // 没排到班的人今天休息
+            var allWorking = {};
+            ['morning', 'middle', 'night'].forEach(function(s) {
+                daySchedule[s].forEach(function(n) { allWorking[n] = true; });
+            });
+            self.employees.forEach(function(emp) {
+                if (!allWorking[emp.name]) {
+                    daySchedule.rest.push(emp.name);
+                }
             });
 
             self.schedule[dateStr] = daySchedule;
         });
-
-        this.stats = stats;
-    };
-
-    // 判断某组某天是否休息
-    ShiftScheduler.prototype._shouldGroupRest = function(groupType, meta) {
-        if (groupType === 'big') {
-            return meta.isWeekend;
-        } else {
-            return meta.dayOfWeek === 0;
-        }
     };
 
     /**
-     * 从候选人中挑选最佳人选
+     * 从候选人中选出 count 人上班
      * 
-     * 评分规则（分数越低越优先）：
-     * - 晚班后接早班 +1000（严格避免）
-     * - 中班后接早班 +100（尽量避免）
-     * - 连续工作>=6天 +500
-     * - 总工作天数 *10（公平性）
-     * - 该班次累计 *5（均衡班次）
-     * - 微量随机扰动
+     * 评分越低越优先上班（让分数高的人多休息）
+     * - 历史工作天数多 → 分高（让他休息）
+     * - 本周已连续工作天数多 → 分高
+     * - 历史周末值班多 → 分高（如果今天是周末）
+     * - 请假/调休 → 已排除
      */
-    ShiftScheduler.prototype._pickBest = function(candidates, count, shift, stats) {
-        if (candidates.length === 0 || count === 0) return [];
+    Scheduler.prototype._selectWorkers = function(pool, count, shift, dateStr, meta) {
+        if (count === 0 || pool.length === 0) return [];
+        var self = this;
 
-        var scored = candidates.map(function(name) {
-            var s = stats[name];
+        var scored = pool.map(function(name) {
             var score = 0;
+            var hist = self.history[name] || { totalWork: 0, weekendDuty: 0, totalRest: 0 };
 
-            // 晚班后接早班：凌晨5点下班，9点上班，只有4小时休息，身体受不了
-            if (shift === 'morning' && s.lastShift === 'night') {
-                score += 1000;
-            }
-            // 中班后接早班：凌晨1点下班，9点上班，只有8小时不够
-            if (shift === 'morning' && s.lastShift === 'middle') {
-                score += 100;
-            }
-
-            // 连续工作太久需要休息
-            if (s.consecutiveWork >= 6) {
-                score += 500;
-            } else if (s.consecutiveWork >= 5) {
-                score += 200;
+            // 本周已连续工作了几天——从前面的天数倒查
+            var consecutiveWork = 0;
+            for (var i = self.dates.indexOf(dateStr) - 1; i >= 0; i--) {
+                var prevDate = self.dates[i];
+                var prevSched = self.schedule[prevDate];
+                if (prevSched && prevSched.rest.indexOf(name) >= 0) break;
+                consecutiveWork++;
             }
 
-            // 工作总天数越多，分数越高（让工作少的人优先）
-            score += s.totalWork * 10;
+            // 连续工作越多，越不想让他继续上（加分=靠后）
+            if (consecutiveWork >= 5) score += 500;
+            else if (consecutiveWork >= 4) score += 200;
+            else score += consecutiveWork * 20;
 
-            // 该班次上班次数越多，分数越高（均衡各班次）
-            score += (s[shift] || 0) * 5;
+            // 历史总工作天数越多，分越高（平衡）
+            score += (hist.totalWork || 0) * 5;
 
-            // 微量随机扰动，避免死板
-            score += Math.random() * 3;
+            // 如果是周末，历史周末值班多的人分高
+            if (meta.isWeekend) {
+                score += (hist.weekendDuty || 0) * 30;
+            }
+
+            // 微量随机扰动
+            score += Math.random() * 5;
 
             return { name: name, score: score };
         });
 
+        // 分数低的优先上班
         scored.sort(function(a, b) { return a.score - b.score; });
         return scored.slice(0, count).map(function(s) { return s.name; });
     };
 
-    ShiftScheduler.prototype.getStats = function() { return this.stats; };
-    ShiftScheduler.prototype.getDateMeta = function() { return this.dateMeta; };
+    // 本周排班分析
+    Scheduler.prototype._analyze = function() {
+        var self = this;
+        var result = {
+            perPerson: {},
+            warnings: [],
+            suggestions: [],
+            summary: {}
+        };
 
-    // 手动修改某天某人的班次
-    ShiftScheduler.prototype.updateShift = function(dateStr, employeeName, newShift) {
-        var daySchedule = this.schedule[dateStr];
-        if (!daySchedule) return;
+        this.employees.forEach(function(emp) {
+            var name = emp.name;
+            var data = {
+                name: name,
+                fixedShift: emp.shift,
+                fixedShiftLabel: SHIFT_CONFIG[emp.shift].label,
+                fixedShiftTime: SHIFT_CONFIG[emp.shift].time,
+                workDays: [],
+                restDays: [],
+                weekendDutyDays: [],
+                isDoubleRest: false,    // 本周是否连休两天
+                isSingleRest: false,
+                isNoRest: false,
+                restType: '',
+                restLabel: '',
+                consecutiveWork: 0,     // 本周最长连续工作
+                totalHours: 0,
+                issues: [],
+                special: self.specials[name] || null
+            };
 
-        var allShifts = this.SHIFTS.concat(['rest']);
-        // 先从所有班次移除
-        allShifts.forEach(function(shift) {
-            if (daySchedule[shift]) {
-                var idx = daySchedule[shift].indexOf(employeeName);
-                if (idx >= 0) daySchedule[shift].splice(idx, 1);
+            var consecutive = 0;
+            var maxConsec = 0;
+
+            self.dates.forEach(function(dateStr) {
+                var daySched = self.schedule[dateStr];
+                var meta = self.dateMeta[dateStr];
+                var isResting = daySched.rest.indexOf(name) >= 0;
+
+                if (isResting) {
+                    data.restDays.push(dateStr);
+                    if (consecutive > maxConsec) maxConsec = consecutive;
+                    consecutive = 0;
+                } else {
+                    data.workDays.push(dateStr);
+                    consecutive++;
+                    if (meta.isWeekend) {
+                        data.weekendDutyDays.push(dateStr);
+                    }
+                }
+            });
+            if (consecutive > maxConsec) maxConsec = consecutive;
+            data.consecutiveWork = maxConsec;
+            data.totalHours = data.workDays.length * SHIFT_CONFIG[emp.shift].hours;
+
+            // 分析休息类型
+            var restCount = data.restDays.length;
+            if (restCount === 0) {
+                data.isNoRest = true;
+                data.restType = 'none';
+                data.restLabel = '❌ 无休';
+                data.issues.push({ level: 'danger', text: '本周没有任何休息日！' });
+                result.warnings.push('🔴 ' + name + ' 本周没有休息日，请务必调整');
+            } else if (restCount === 1) {
+                data.isSingleRest = true;
+                data.restType = 'single';
+                data.restLabel = '🟡 单休';
+            } else {
+                // 检查是否连休
+                var sortedRest = data.restDays.slice().sort();
+                var isConsec = true;
+                for (var i = 1; i < sortedRest.length; i++) {
+                    var diff = (new Date(sortedRest[i]) - new Date(sortedRest[i-1])) / 86400000;
+                    if (diff > 1) { isConsec = false; break; }
+                }
+                if (restCount >= 2 && isConsec) {
+                    data.isDoubleRest = true;
+                    data.restType = 'double';
+                    data.restLabel = '🟢 连休' + restCount + '天';
+                } else {
+                    data.restType = 'split';
+                    data.restLabel = '🟠 拆休' + restCount + '天';
+                    data.issues.push({ level: 'warning', text: '休息日不连续，建议调整为连休' });
+                }
+            }
+
+            // 连续工作过长预警
+            if (data.consecutiveWork >= 6) {
+                data.issues.push({ level: 'danger', text: '连续工作' + data.consecutiveWork + '天，严重疲劳' });
+                result.warnings.push('🔴 ' + name + ' 连续工作' + data.consecutiveWork + '天');
+            } else if (data.consecutiveWork >= 5) {
+                data.issues.push({ level: 'warning', text: '连续工作' + data.consecutiveWork + '天，较为辛苦' });
+            }
+
+            // 特殊情况标记
+            if (data.special) {
+                var sp = data.special;
+                if (sp.type === 'dayoff') {
+                    data.issues.push({ level: 'info', text: '本周使用调休假 ' + sp.days.length + ' 天' });
+                } else if (sp.type === 'leave') {
+                    data.issues.push({ level: 'info', text: '本周请假 ' + sp.days.length + ' 天' });
+                }
+            }
+
+            result.perPerson[name] = data;
+        });
+
+        // 全局建议
+        var noRestPeople = [];
+        var splitRestPeople = [];
+        self.employees.forEach(function(emp) {
+            var d = result.perPerson[emp.name];
+            if (d.isNoRest) noRestPeople.push(emp.name);
+            if (d.restType === 'split') splitRestPeople.push(emp.name);
+        });
+
+        if (noRestPeople.length > 0) {
+            result.suggestions.push({
+                icon: '🚨',
+                text: noRestPeople.join('、') + ' 本周没有休息，必须安排至少1天休息'
+            });
+        }
+        if (splitRestPeople.length > 0) {
+            result.suggestions.push({
+                icon: '💡',
+                text: splitRestPeople.join('、') + ' 的休息日被拆开了，建议调成连休'
+            });
+        }
+
+        // 周末值班公平性
+        var weekendDutyMap = {};
+        self.employees.forEach(function(emp) {
+            weekendDutyMap[emp.name] = result.perPerson[emp.name].weekendDutyDays.length;
+        });
+        // 同班次内对比
+        ['morning', 'middle', 'night'].forEach(function(shift) {
+            var group = self.employees.filter(function(e) { return e.shift === shift; });
+            if (group.length <= 1) return;
+            var duties = group.map(function(e) { return weekendDutyMap[e.name]; });
+            var max = Math.max.apply(null, duties);
+            var min = Math.min.apply(null, duties);
+            if (max - min >= 2) {
+                var maxName = group.find(function(e) { return weekendDutyMap[e.name] === max; }).name;
+                var minName = group.find(function(e) { return weekendDutyMap[e.name] === min; }).name;
+                result.suggestions.push({
+                    icon: '⚖️',
+                    text: SHIFT_CONFIG[shift].label + '组：' + maxName + ' 周末值了' + max + '天，' + minName + ' 只值了' + min + '天，建议下周平衡'
+                });
             }
         });
 
-        // 加入新班次
-        if (daySchedule[newShift]) {
-            daySchedule[newShift].push(employeeName);
+        if (result.warnings.length === 0) {
+            result.suggestions.push({ icon: '✅', text: '本周排班合理，没有严重问题 👍' });
+        }
+
+        result.summary = {
+            totalEmployees: self.employees.length,
+            weekType: self.weekType === 'big' ? '大休周（双休）' : '小休周（单休）',
+            busyness: self.busyness === 'light' ? '宽松' : self.busyness === 'busy' ? '繁忙' : '正常',
+            dateRange: self.dates[0] + ' ~ ' + self.dates[6]
+        };
+
+        return result;
+    };
+
+    // 手动修改某天某人的状态（上班/休息）
+    Scheduler.prototype.updateDay = function(dateStr, empName, newStatus) {
+        var daySched = this.schedule[dateStr];
+        if (!daySched) return;
+
+        var emp = this.employees.find(function(e) { return e.name === empName; });
+        if (!emp) return;
+
+        // 先从所有列表移除
+        ['morning', 'middle', 'night', 'rest'].forEach(function(key) {
+            var idx = daySched[key].indexOf(empName);
+            if (idx >= 0) daySched[key].splice(idx, 1);
+        });
+
+        // 加入新状态
+        if (newStatus === 'rest') {
+            daySched.rest.push(empName);
+        } else {
+            // 按固定班次上班
+            daySched[emp.shift].push(empName);
         }
     };
 
-    ShiftScheduler.prototype._formatDate = function(date) {
-        var y = date.getFullYear();
-        var m = String(date.getMonth() + 1);
-        if (m.length < 2) m = '0' + m;
-        var d = String(date.getDate());
-        if (d.length < 2) d = '0' + d;
-        return y + '-' + m + '-' + d;
+    // 重新分析（手动修改后调用）
+    Scheduler.prototype.reAnalyze = function() {
+        return this._analyze();
     };
 
-    return ShiftScheduler;
+    // 工具
+    function _formatDate(d) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
 
+    // 暴露班次配置供外部使用
+    Scheduler.SHIFT_CONFIG = SHIFT_CONFIG;
+    Scheduler.DAY_NAMES = DAY_NAMES;
+
+    return Scheduler;
 })();
