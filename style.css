@@ -104,12 +104,16 @@ body {
 .emp-group { margin-bottom: 10px; }
 .emp-group-title {
     font-size: 13px; font-weight: 600; color: var(--gray-600);
-    padding: 4px 0; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+    padding: 4px 0; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
 .emp-group-title small { font-weight: 400; color: var(--gray-400); }
 .emp-count {
     font-size: 11px; background: var(--gray-100); color: var(--gray-500);
     padding: 1px 6px; border-radius: 10px;
+}
+.emp-need {
+    font-size: 10px; background: var(--primary-bg); color: var(--primary);
+    padding: 1px 6px; border-radius: 10px; font-weight: 500;
 }
 .emp-tag {
     display: flex; align-items: center; justify-content: space-between;
@@ -169,7 +173,7 @@ body {
 .date-check input { margin: 0; }
 
 /* ========== 班次说明 ========== */
-.shift-legend { display: flex; flex-direction: column; gap: 6px; }
+.shift-legend { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .shift-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--gray-600); }
 .shift-dot {
     width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
@@ -177,6 +181,18 @@ body {
 .shift-dot.morning { background: var(--morning-color); }
 .shift-dot.middle { background: var(--middle-color); }
 .shift-dot.night { background: var(--night-color); }
+
+/* 排班规则 */
+.shift-rules { margin-top: 8px; }
+.shift-rules h3 { font-size: 13px; color: var(--gray-600); margin-bottom: 6px; }
+.shift-rules ul { padding-left: 18px; }
+.shift-rules li { font-size: 12px; color: var(--gray-600); line-height: 1.8; }
+.rule-highlight {
+    background: #dcfce7; color: #166534; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+}
+.rule-highlight-alt {
+    background: #fef3c7; color: #92400e; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+}
 
 /* ========== 预警横幅 ========== */
 .warning-banner {
@@ -189,6 +205,45 @@ body {
 .warning-icon { font-size: 20px; flex-shrink: 0; }
 .warning-list { display: flex; flex-direction: column; gap: 4px; }
 .warning-item { font-size: 13px; color: #991b1b; line-height: 1.6; }
+
+/* ========== 覆盖率面板 ========== */
+.coverage-panel {
+    background: white; border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+}
+.coverage-title {
+    font-size: 15px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px;
+}
+.coverage-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;
+}
+.coverage-day {
+    border-radius: 8px; padding: 8px; text-align: center;
+    border: 2px solid var(--gray-200); transition: all 0.2s;
+}
+.coverage-day.ok { border-color: #a7f3d0; background: #f0fdf4; }
+.coverage-day.short { border-color: #fecaca; background: #fef2f2; }
+.cov-date { font-size: 13px; font-weight: 700; color: var(--gray-800); }
+.cov-day { font-size: 11px; color: var(--gray-500); margin-bottom: 4px; }
+.cov-tag {
+    display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    font-weight: 600; margin-bottom: 6px;
+}
+.cov-tag.full { background: #dcfce7; color: #166534; }
+.cov-tag.reduced { background: #fef3c7; color: #92400e; }
+.cov-shift {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 3px 6px; border-radius: 4px; margin-bottom: 2px; font-size: 11px;
+}
+.cov-shift.ok { background: #f0fdf4; color: #166534; }
+.cov-shift.short { background: #fef2f2; color: #991b1b; font-weight: 600; }
+.cov-shift-name { font-weight: 600; }
+.cov-shift-count { font-weight: 700; }
+.cov-shift-icon { font-size: 12px; }
+.coverage-ok {
+    text-align: center; padding: 10px; margin-top: 10px;
+    background: #f0fdf4; border-radius: 6px; color: #166534;
+    font-size: 13px; font-weight: 600;
+}
 
 /* ========== 排班表头部 ========== */
 .schedule-header {
@@ -212,10 +267,17 @@ body {
 .week-table th.weekend { background: #fef3c7; color: var(--warning); }
 .th-date { font-size: 14px; font-weight: 700; color: var(--gray-800); }
 .th-day { font-size: 11px; color: var(--gray-500); }
-.rest-tag {
-    display: inline-block; font-size: 10px; padding: 1px 4px; border-radius: 3px;
-    background: var(--rest-bg); color: var(--rest-color); margin-top: 2px;
+
+/* 满员/减半标签 */
+.day-type-tag {
+    display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    font-weight: 600; margin-top: 2px;
 }
+.day-type-tag.full { background: #dcfce7; color: #166534; }
+.day-type-tag.reduced { background: #fef3c7; color: #92400e; }
+.day-type-mini { font-weight: 600; }
+.day-type-mini.full { color: #166534; }
+.day-type-mini.reduced { color: #92400e; }
 
 .shift-cell {
     padding: 6px; border-bottom: 1px solid var(--gray-100); vertical-align: top; cursor: pointer;
@@ -225,11 +287,29 @@ body {
 .shift-cell.weekend-cell { background: #fffbeb; }
 .shift-cell.weekend-cell:hover { background: #fef3c7; }
 
+/* 缺员高亮 */
+.shift-cell.shortage-cell {
+    background: #fef2f2 !important;
+    border: 2px solid #fecaca !important;
+    border-bottom: 2px solid #fecaca !important;
+}
+.shift-cell.shortage-cell:hover {
+    background: #fee2e2 !important;
+}
+
 .shift-label {
     font-size: 11px; padding: 3px 6px; border-radius: 4px; margin-bottom: 4px;
     display: inline-block; font-weight: 600;
 }
 .shift-label small { font-weight: 400; }
+
+/* 人数计数器 */
+.cell-count {
+    font-size: 10px; text-align: center; padding: 1px 4px; border-radius: 3px;
+    margin-bottom: 3px; font-weight: 600;
+}
+.cell-count.count-ok { background: #dcfce7; color: #166534; }
+.cell-count.count-short { background: #fecaca; color: #991b1b; }
 
 .cell-person {
     padding: 4px 8px; border-radius: 4px; margin-bottom: 2px; font-size: 13px; font-weight: 500;
@@ -246,6 +326,10 @@ body {
 
 .rest-cell { background: var(--gray-50); }
 .rest-row td { border-top: 2px solid var(--gray-200); }
+.rest-header {
+    font-size: 11px; color: var(--gray-500); margin-bottom: 4px; font-weight: 600;
+}
+.rest-header small { font-weight: 400; }
 
 /* ========== 人员视图 ========== */
 .person-table {
@@ -265,6 +349,7 @@ body {
     text-align: left; font-weight: 500; position: sticky; left: 0; background: white; z-index: 5;
 }
 .person-table td.weekend-cell { background: #fffbeb; }
+.person-table td.stat-cell { font-weight: 600; font-size: 12px; }
 .person-table tbody tr:hover td { background: var(--primary-bg); }
 .person-table tbody tr:hover td.name-cell { background: var(--primary-bg); }
 
@@ -409,13 +494,13 @@ body {
 .modal-backdrop { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); }
 .modal-content {
     position: relative; background: white; border-radius: 12px;
-    width: 90%; max-width: 560px; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-lg);
+    width: 90%; max-width: 600px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg);
 }
 .modal-header {
     display: flex; justify-content: space-between; align-items: center;
     padding: 16px 20px; border-bottom: 1px solid var(--gray-200);
 }
-.modal-header h3 { font-size: 16px; }
+.modal-header h3 { font-size: 15px; }
 .modal-close {
     background: none; border: none; font-size: 24px; color: var(--gray-400);
     cursor: pointer; padding: 0 4px;
@@ -431,22 +516,52 @@ body {
     font-size: 12px; color: var(--primary); background: var(--primary-bg);
     padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;
 }
+
+/* 编辑弹窗 - 覆盖状态 */
+.edit-coverage {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+    padding: 10px; background: var(--gray-50); border-radius: 8px;
+}
+.edit-cov-item {
+    font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 500;
+}
+.edit-cov-item.ok { background: #dcfce7; color: #166534; }
+.edit-cov-item.short { background: #fecaca; color: #991b1b; }
+
+/* 编辑弹窗 - 班次分组 */
+.edit-shift-group {
+    margin-bottom: 14px; padding: 10px; background: var(--gray-50); border-radius: 8px;
+}
+.edit-shift-title {
+    font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.edit-shift-need {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: var(--primary-bg); color: var(--primary); font-weight: 500;
+}
+
 .edit-row {
     display: flex; align-items: center; gap: 10px;
-    padding: 8px 0; border-bottom: 1px solid var(--gray-100);
+    padding: 8px 10px; background: white; border-radius: 6px; margin-bottom: 4px;
 }
-.edit-row:last-child { border: none; }
+.edit-row:last-child { margin-bottom: 0; }
 .edit-name {
-    flex: 1; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 4px;
+    flex: 1; font-weight: 500; font-size: 13px; display: flex; align-items: center; gap: 4px;
+    flex-wrap: wrap;
 }
-.edit-shift { color: var(--gray-400); font-weight: 400; }
+.edit-week-info {
+    display: block; font-size: 11px; color: var(--gray-500); font-weight: 400;
+    width: 100%; margin-top: 2px;
+}
 .edit-issue-count {
-    font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: 600;
-    background: #fffbeb; color: var(--warning);
+    font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
 }
+.edit-issue-count.warning { background: #fffbeb; color: var(--warning); }
+.edit-issue-count.danger { background: #fef2f2; color: var(--danger); }
 .edit-select {
     padding: 6px 8px; border: 1px solid var(--gray-300); border-radius: 6px;
-    font-size: 13px; font-family: inherit;
+    font-size: 13px; font-family: inherit; flex-shrink: 0;
 }
 
 /* ========== 影响报告 ========== */
@@ -454,9 +569,18 @@ body {
     font-size: 14px; font-weight: 600; color: var(--gray-700);
     padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--gray-200);
 }
+.impact-coverage { margin-bottom: 14px; }
+.impact-coverage h4 { font-size: 13px; color: var(--gray-600); margin-bottom: 8px; }
+.impact-cov-item {
+    font-size: 13px; padding: 6px 10px; border-radius: 6px; margin-bottom: 4px;
+}
+.impact-cov-item.short { background: #fef2f2; color: #991b1b; }
+.impact-cov-item.ok { background: #ecfdf5; color: #065f46; }
+.impact-list h4 { font-size: 13px; color: var(--gray-600); margin-bottom: 8px; }
 .impact-list { display: flex; flex-direction: column; gap: 10px; }
 .impact-person { background: var(--gray-50); border-radius: 8px; padding: 10px 12px; }
 .impact-name { font-size: 14px; font-weight: 600; color: var(--gray-800); margin-bottom: 6px; }
+.impact-name small { font-weight: 400; color: var(--gray-500); }
 .impact-rest-change {
     font-size: 13px; padding: 4px 8px; border-radius: 4px;
     background: var(--primary-bg); color: var(--primary); margin-bottom: 4px;
@@ -471,7 +595,7 @@ body {
     position: fixed; bottom: 24px; right: 24px;
     background: var(--gray-800); color: white; padding: 10px 20px;
     border-radius: var(--radius); font-size: 14px; z-index: 9999;
-    animation: slideUp 0.3s ease;
+    animation: slideUp 0.3s ease; max-width: 400px;
 }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } }
 
@@ -485,6 +609,14 @@ body {
     .pr-stats { grid-template-columns: repeat(3, 1fr); }
     .pr-days { flex-wrap: wrap; }
     .overview-summary { flex-direction: column; }
+    .coverage-grid { grid-template-columns: repeat(4, 1fr); }
+    .edit-row { flex-direction: column; align-items: flex-start; }
+    .edit-select { width: 100%; }
+}
+
+@media (max-width: 600px) {
+    .coverage-grid { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; gap: 8px; }
 }
 
 /* 滚动条 */
